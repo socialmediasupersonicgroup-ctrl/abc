@@ -2,7 +2,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 export function TableWrap({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("w-full overflow-x-auto scrollbar-thin", className)} {...props} />;
+  return <div className={cn("relative w-full overflow-x-auto scrollbar-thin", className)} {...props} />;
 }
 
 export function Table({ className, ...props }: React.TableHTMLAttributes<HTMLTableElement>) {

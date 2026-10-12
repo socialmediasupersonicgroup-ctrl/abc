@@ -22,10 +22,17 @@ import { cn } from "@/lib/utils";
 const KEYS = ["q", "status", "platform", "campaign"];
 type View = "board" | "list" | "calendar";
 
-export function ContentView({ items, campaigns, selected, view }: { items: ContentRecord[]; campaigns: string[]; selected: ContentRecord | null; view: View }) {
+export function ContentView({ items, campaigns, selected, view: initialView }: { items: ContentRecord[]; campaigns: string[]; selected: ContentRecord | null; view: View }) {
+  // Local state makes the switch instant; the URL keeps it shareable and reload-safe.
+  const [view, setView] = React.useState(initialView);
   const { workspace, today, openCreate } = useApp();
   const tz = workspace.timezone;
   const { params, set } = useUrlParams();
+  // Follow the browser URL (not the server prop), so a late server refresh can't revert the chosen view.
+  const urlView = params.get("view");
+  React.useEffect(() => {
+    setView(urlView && (["board", "list", "calendar"] as string[]).includes(urlView) ? (urlView as typeof initialView) : "board");
+  }, [urlView]);
   const [editing, setEditing] = React.useState<ContentRecord | null>(selected);
   const [optimistic, setOptimistic] = React.useState<Record<string, string>>({});
   React.useEffect(() => setEditing(selected), [selected]);
@@ -61,7 +68,10 @@ export function ContentView({ items, campaigns, selected, view }: { items: Conte
         <Segmented
           label="View"
           value={view}
-          onChange={(v) => set({ view: v === "board" ? null : v }, { replace: true })}
+          onChange={(v) => {
+              setView(v);
+              set({ view: v === "board" ? null : v }, { replace: true });
+            }}
           options={[
             { value: "board", label: "Board", icon: Columns3 },
             { value: "list", label: "List", icon: List },
@@ -86,7 +96,7 @@ export function ContentView({ items, campaigns, selected, view }: { items: Conte
           />
         </Card>
       ) : view === "board" ? (
-        <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0 xl:grid xl:grid-cols-5 xl:overflow-visible">
+        <div className="relative -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0 xl:grid xl:grid-cols-5 xl:overflow-visible">
           {CONTENT_STATUS.list.map((col) => {
             const colItems = rows.filter((r) => r.status === col.value);
             return (

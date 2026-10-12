@@ -59,6 +59,10 @@ export async function listTasks(workspaceId: string, filters: TaskFilters = {}, 
   if (filters.sort === "priority") {
     tasks.sort((a, b) => PRIORITY_RANK[a.priority as Priority] - PRIORITY_RANK[b.priority as Priority]);
   }
+  if (!filters.sort || filters.sort === "due" || filters.sort === "priority") {
+    // Open work first; completed tasks sink to the bottom (Array.prototype.sort is stable).
+    tasks.sort((a, b) => Number(a.status === "DONE") - Number(b.status === "DONE"));
+  }
   return tasks;
 }
 

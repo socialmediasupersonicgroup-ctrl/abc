@@ -27,9 +27,16 @@ export type TaskItem = Omit<TaskRecord, "tags"> & {
 
 const FILTER_KEYS = ["q", "status", "priority", "projectId", "tag", "due"];
 
-export function TasksView({ tasks, tags, selected, view }: { tasks: TaskItem[]; tags: string[]; selected: TaskItem | null; view: "list" | "board" }) {
+export function TasksView({ tasks, tags, selected, view: initialView }: { tasks: TaskItem[]; tags: string[]; selected: TaskItem | null; view: "list" | "board" }) {
+  // Local state makes the switch instant; the URL keeps it shareable and reload-safe.
+  const [view, setView] = React.useState(initialView);
   const { options, today, openCreate } = useApp();
   const { params, set } = useUrlParams();
+  // Follow the browser URL (not the server prop), so a late server refresh can't revert the chosen view.
+  const urlView = params.get("view");
+  React.useEffect(() => {
+    setView(urlView && (["list", "board"] as string[]).includes(urlView) ? (urlView as typeof initialView) : "list");
+  }, [urlView]);
   const [optimistic, setOptimistic] = React.useState<Record<string, string>>({});
   const [editing, setEditing] = React.useState<TaskItem | null>(selected);
 
@@ -91,7 +98,10 @@ export function TasksView({ tasks, tags, selected, view }: { tasks: TaskItem[]; 
           <Segmented
             label="View"
             value={view}
-            onChange={(v) => set({ view: v === "list" ? null : v }, { replace: true })}
+            onChange={(v) => {
+              setView(v);
+              set({ view: v === "list" ? null : v }, { replace: true });
+            }}
             options={[
               { value: "list", label: "List", icon: List },
               { value: "board", label: "Board", icon: Columns3 },
@@ -129,7 +139,7 @@ export function TasksView({ tasks, tags, selected, view }: { tasks: TaskItem[]; 
                   <TH>Task</TH>
                   <TH>Status</TH>
                   <TH className="hidden md:table-cell">Priority</TH>
-                  <TH>Due</TH>
+                  <TH className="hidden sm:table-cell">Due</TH>
                   <TH className="hidden lg:table-cell">Project / customer</TH>
                   <TH className="hidden xl:table-cell">Assignee</TH>
                 </tr>
@@ -151,6 +161,9 @@ export function TasksView({ tasks, tags, selected, view }: { tasks: TaskItem[]; 
                       <TD className="max-w-[360px]">
                         <button onClick={() => openTask(t)} className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                           <span className={cn("block truncate font-medium", done && "text-muted-foreground line-through decoration-muted-foreground/50")}>{t.title}</span>
+                          <span className="mt-0.5 flex sm:hidden">
+                            <DueLabel date={t.dueDate} today={today} done={done} />
+                          </span>
                           {t.tags.length > 0 && (
                             <span className="mt-0.5 flex flex-wrap gap-1">
                               {t.tags.map((tag) => (
@@ -168,7 +181,7 @@ export function TasksView({ tasks, tags, selected, view }: { tasks: TaskItem[]; 
                       <TD className="hidden md:table-cell">
                         <PriorityIcon priority={t.priority} withLabel />
                       </TD>
-                      <TD>
+                      <TD className="hidden sm:table-cell">
                         <DueLabel date={t.dueDate} today={today} done={done} />
                       </TD>
                       <TD className="hidden max-w-[220px] lg:table-cell">
@@ -220,7 +233,7 @@ function Board({
   const [dragOver, setDragOver] = React.useState<string | null>(null);
   const byId = new Map(tasks.map((t) => [t.id, t]));
   return (
-    <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0 lg:grid lg:grid-cols-4 lg:overflow-visible">
+    <div className="relative -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0 lg:grid lg:grid-cols-4 lg:overflow-visible">
       {TASK_STATUS.list.map((col) => {
         const items = tasks.filter((t) => t.status === col.value);
         return (

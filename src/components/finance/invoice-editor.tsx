@@ -76,7 +76,7 @@ export function InvoiceEditor({ invoiceId, initial, amountPaid = 0 }: { invoiceI
                   ))}
                 </Select>
               </Field>
-              <Field label="Project" htmlFor="inv-project" hint="Optional">
+              <Field label="Project (optional)" htmlFor="inv-project">
                 <Select id="inv-project" {...register("projectId")}>
                   <option value="">No project</option>
                   {projects.map((p) => (

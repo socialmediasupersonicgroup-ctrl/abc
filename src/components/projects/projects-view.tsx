@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { FolderKanban, LayoutGrid, Plus, Table2 } from "lucide-react";
 import { PRIORITY, PROJECT_STATUS } from "@/lib/constants";
@@ -29,10 +30,17 @@ export type ProjectItem = {
 
 const KEYS = ["q", "status", "priority", "customerId"];
 
-export function ProjectsView({ projects, view }: { projects: ProjectItem[]; view: "cards" | "table" }) {
+export function ProjectsView({ projects, view: initialView }: { projects: ProjectItem[]; view: "cards" | "table" }) {
+  // Local state makes the switch instant; the URL keeps it shareable and reload-safe.
+  const [view, setView] = React.useState(initialView);
   const { options, today, openCreate } = useApp();
   const money = useMoney();
   const { params, set } = useUrlParams();
+  // Follow the browser URL (not the server prop), so a late server refresh can't revert the chosen view.
+  const urlView = params.get("view");
+  React.useEffect(() => {
+    setView(urlView && (["cards", "table"] as string[]).includes(urlView) ? (urlView as typeof initialView) : "cards");
+  }, [urlView]);
   const filtered = KEYS.some((k) => params.get(k));
 
   return (
@@ -64,7 +72,10 @@ export function ProjectsView({ projects, view }: { projects: ProjectItem[]; view
           <Segmented
             label="View"
             value={view}
-            onChange={(v) => set({ view: v === "cards" ? null : v }, { replace: true })}
+            onChange={(v) => {
+              setView(v);
+              set({ view: v === "cards" ? null : v }, { replace: true });
+            }}
             options={[
               { value: "cards", label: "Cards", icon: LayoutGrid },
               { value: "table", label: "Table", icon: Table2 },

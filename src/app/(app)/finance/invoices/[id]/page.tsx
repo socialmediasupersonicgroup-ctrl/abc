@@ -119,7 +119,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
             </div>
           </div>
 
-          <div className="mt-10 overflow-x-auto">
+          <div className="relative mt-10 overflow-x-auto">
             <table className="w-full min-w-[480px] text-sm">
               <thead>
                 <tr className="border-b text-left text-xs text-muted-foreground">

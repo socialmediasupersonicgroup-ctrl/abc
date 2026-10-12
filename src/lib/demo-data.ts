@@ -305,7 +305,7 @@ export async function seedDemoData(db: PrismaClient, workspaceId: string, tz = "
   const noteSeed: [string, string, boolean, string, string | null, string | null][] = [
     [
       "Pricing guidelines",
-      "# Pricing guidelines\n\n- Discovery workshops are billed upfront.\n- Projects over ₹2,00,000 are split into milestones.\n- Retainers renew monthly; review scope every quarter.\n\n**Remember:** quote GST separately.",
+      "- Discovery workshops are billed upfront.\n- Projects over ₹2,00,000 are split into milestones.\n- Retainers renew monthly; review scope every quarter.\n\n**Remember:** quote GST separately.",
       true,
       "sales,finance",
       null,
