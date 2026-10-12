@@ -1,0 +1,285 @@
+// NEXUS — Business Operating System
+// Money is stored as integer minor units (paise for INR) to keep arithmetic exact.
+// Percentages (tax, discount) are stored in basis points (1800 = 18.00%).
+// Enumerations are stored as strings and validated in src/lib/constants.ts + zod schemas.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Workspace {
+  id           String   @id @default(cuid())
+  name         String
+  currency     String   @default("INR")
+  locale       String   @default("en-IN")
+  timezone     String   @default("Asia/Kolkata")
+  weekStartsOn Int      @default(1)
+  ownerName    String   @default("")
+  ownerEmail   String   @default("")
+  invoicePrefix String  @default("INV-")
+  defaultTaxBps Int     @default(1800)
+  isDemo       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  customers    Customer[]
+  projects     Project[]
+  tasks        Task[]
+  transactions Transaction[]
+  invoices     Invoice[]
+  events       Event[]
+  contentItems ContentItem[]
+  notes        Note[]
+  tags         Tag[]
+}
+
+model Tag {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  tasks       Task[]
+  notes       Note[]
+  createdAt   DateTime  @default(now())
+
+  @@unique([workspaceId, name])
+}
+
+model Customer {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name           String
+  company        String?
+  email          String?
+  phone          String?
+  status         String    @default("LEAD")
+  source         String?
+  dealValue      Int       @default(0)
+  notes          String?
+  lastContactAt  DateTime?
+  nextFollowUpAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  projects     Project[]
+  tasks        Task[]
+  invoices     Invoice[]
+  transactions Transaction[]
+  events       Event[]
+  linkedNotes  Note[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, nextFollowUpAt])
+}
+
+model Project {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  status         String    @default("PLANNING")
+  priority       String    @default("MEDIUM")
+  startDate      DateTime?
+  dueDate        DateTime?
+  progressMode   String    @default("AUTO") // AUTO = from tasks, MANUAL = manualProgress
+  manualProgress Int       @default(0)
+  budget         Int       @default(0)
+  notes          String?
+  customerId     String?
+  customer       Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  tasks        Task[]
+  invoices     Invoice[]
+  transactions Transaction[]
+  events       Event[]
+  linkedNotes  Note[]
+
+  @@index([workspaceId, status])
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  status      String    @default("TODO")
+  priority    String    @default("MEDIUM")
+  dueDate     DateTime?
+  assignee    String?
+  completedAt DateTime?
+  projectId   String?
+  project     Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  customerId  String?
+  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  tags        Tag[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  events      Event[]
+  linkedNotes Note[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, dueDate])
+  @@index([projectId])
+}
+
+model Transaction {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  description   String
+  amount        Int // always positive, minor units
+  type          String // INCOME | EXPENSE
+  category      String
+  date          DateTime
+  paymentMethod String?
+  reference     String?
+  notes         String?
+  customerId    String?
+  customer      Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  projectId     String?
+  project       Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  // When set, this income transaction was created by recording an invoice payment.
+  // It is managed through the payment and cannot be edited on its own.
+  paymentId     String?   @unique
+  payment       Payment?  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([workspaceId, date])
+  @@index([workspaceId, type])
+}
+
+model Invoice {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  number         String
+  customerId     String
+  customer       Customer  @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  projectId      String?
+  project        Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  status         String    @default("DRAFT")
+  issueDate      DateTime
+  dueDate        DateTime
+  currency       String    @default("INR")
+  discountType   String    @default("NONE") // NONE | PERCENT | FIXED
+  discountValue  Int       @default(0) // bps when PERCENT, minor units when FIXED
+  taxRateBps     Int       @default(0)
+  taxLabel       String    @default("GST")
+  subtotal       Int       @default(0)
+  discountAmount Int       @default(0)
+  taxAmount      Int       @default(0)
+  total          Int       @default(0)
+  amountPaid     Int       @default(0)
+  notes          String?
+  terms          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  items    InvoiceItem[]
+  payments Payment[]
+
+  @@unique([workspaceId, number])
+  @@index([workspaceId, status])
+  @@index([customerId])
+}
+
+model InvoiceItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Float
+  unitPrice   Int
+  lineTotal   Int
+  sortOrder   Int     @default(0)
+}
+
+model Payment {
+  id          String       @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  amount      Int
+  date        DateTime
+  method      String?
+  reference   String?
+  notes       String?
+  transaction Transaction?
+  createdAt   DateTime     @default(now())
+
+  @@index([invoiceId])
+}
+
+model Event {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  location    String?
+  startAt     DateTime
+  endAt       DateTime
+  allDay      Boolean   @default(false)
+  taskId      String?
+  task        Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  projectId   String?
+  project     Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  customerId  String?
+  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId, startAt])
+}
+
+model ContentItem {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  title       String
+  platform    String
+  format      String
+  campaign    String?
+  scheduledAt DateTime?
+  status      String    @default("IDEA")
+  caption     String?
+  hashtags    String?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, scheduledAt])
+}
+
+model Note {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  title       String
+  content     String    @default("")
+  pinned      Boolean   @default(false)
+  archived    Boolean   @default(false)
+  tags        Tag[]
+  taskId      String?
+  task        Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  projectId   String?
+  project     Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  customerId  String?
+  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId, archived, pinned])
+}
