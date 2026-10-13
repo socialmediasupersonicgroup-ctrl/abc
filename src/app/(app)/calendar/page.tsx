@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { getContext } from "@/server/workspace";
 import { listEvents, eventInclude } from "@/lib/services/events";
 import { str, type SearchParams } from "@/server/load";
-import { keyToDate, addDaysToKey, zonedDayStart, dateToKey, instantToKey, formatTime } from "@/lib/dates";
+import { keyToDate, addDaysToKey, zonedDayStart, dateToKey, instantToKey, formatTime, formatDateTime } from "@/lib/dates";
 import { safeAnchor, visibleRange, type CalendarView as View } from "@/lib/calendar";
 import { PageHeader } from "@/components/ui/misc";
 import { NewButton } from "@/components/shared/new-button";
@@ -53,6 +53,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Sea
       title: `${c.platform}: ${c.title}`,
       day: instantToKey(c.scheduledAt!, tz),
       time: formatTime(c.scheduledAt!, tz),
+      sortTime: formatDateTime(c.scheduledAt!, tz, "HH:mm"),
       done: c.status === "PUBLISHED",
       href: `/content?item=${c.id}`,
     })),

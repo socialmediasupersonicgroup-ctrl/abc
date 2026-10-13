@@ -5,7 +5,8 @@ import * as React from "react";
  * Supports headings, bullet/numbered lists, blockquotes, code blocks, bold, italic, inline code and links.
  */
 export function Markdown({ text }: { text: string }) {
-  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  // Normalise every line-break form (CRLF, CR, U+2028/U+2029) so regexes see one line per entry.
+  const lines = text.replace(/\r\n?|[\u2028\u2029]/g, "\n").split("\n");
   const blocks: React.ReactNode[] = [];
   let i = 0;
   let key = 0;
@@ -69,6 +70,8 @@ export function Markdown({ text }: { text: string }) {
     }
     const para: string[] = [];
     while (i < lines.length && lines[i].trim() !== "" && !/^(#{1,3}\s|```|>|\s*[-*]\s|\s*\d+[.)]\s)/.test(lines[i])) para.push(lines[i++]);
+    // Always consume at least one line, so text no other rule matches (e.g. "#\t") can never stall the loop.
+    if (para.length === 0) para.push(lines[i++]);
     blocks.push(
       <p key={key++} className="leading-relaxed">
         {inline(para.join(" "))}

@@ -32,7 +32,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const billable = p.invoices.filter((i) => i.status !== "DRAFT" && i.status !== "CANCELLED");
   const invoiced = billable.reduce((s, i) => s + i.total, 0);
   const collected = billable.reduce((s, i) => s + i.amountPaid, 0);
-  const spent = p.transactions.filter((t) => t.type === "EXPENSE").reduce((s, t) => s + t.amount, 0);
+  const spent = p.spent;
   const budgetUsed = p.budget > 0 ? Math.round((spent / p.budget) * 100) : null;
   const sortedTasks = [...p.tasks].sort((a, b) => Number(a.status === "DONE") - Number(b.status === "DONE"));
 

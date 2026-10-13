@@ -47,7 +47,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                 <StatusBadge options={CUSTOMER_STATUS} value={c.status} />
               </div>
               <p className="mt-0.5 text-[13px] text-muted-foreground">
-                {c.company ?? "No company"} · {c.source ? `via ${c.source}` : "source unknown"} · customer since {formatDate(dateToKey(c.createdAt))}
+                {c.company ?? "No company"} · {c.source ? `via ${c.source}` : "source unknown"} · customer since {formatDateTime(c.createdAt, tz, "d MMM yyyy")}
               </p>
             </div>
           </div>

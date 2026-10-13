@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { PRIORITY_RANK, type Priority } from "@/lib/constants";
-import { addDaysToKey, keyToDate } from "@/lib/dates";
+import { addDaysToKey, DEFAULT_TZ, keyToDate, zonedDayStart } from "@/lib/dates";
 import { monthlySeries, percentChange, periodRange, summarize, type Period } from "@/lib/calc/metrics";
 import { projectProgress } from "@/lib/calc/progress";
 import { invoiceBalance } from "@/lib/calc/invoice";
@@ -10,7 +10,7 @@ import type { Db } from "./shared";
 
 export type RecentRecord = { id: string; type: "task" | "project" | "customer" | "invoice" | "note"; title: string; href: string; updatedAt: Date };
 
-export async function getOverview(workspaceId: string, period: Period, today: string, now: Date, db: Db = prisma) {
+export async function getOverview(workspaceId: string, period: Period, today: string, now: Date, tz = DEFAULT_TZ, db: Db = prisma) {
   const todayDate = keyToDate(today);
   const weekAhead = keyToDate(addDaysToKey(today, 7));
   const range = periodRange(period, today);
@@ -54,8 +54,9 @@ export async function getOverview(workspaceId: string, period: Period, today: st
       orderBy: { dueDate: "asc" },
     }),
     db.customer.count({ where: { workspaceId } }),
-    range.current ? db.customer.count({ where: { workspaceId, createdAt: { gte: keyToDate(range.current.from) } } }) : Promise.resolve(null),
-    range.current ? db.customer.count({ where: { workspaceId, createdAt: { lt: keyToDate(range.current.from) } } }) : Promise.resolve(null),
+    // createdAt is an instant, so the period starts at midnight in the workspace zone.
+    range.current ? db.customer.count({ where: { workspaceId, createdAt: { gte: zonedDayStart(range.current.from, tz) } } }) : Promise.resolve(null),
+    range.current ? db.customer.count({ where: { workspaceId, createdAt: { lt: zonedDayStart(range.current.from, tz) } } }) : Promise.resolve(null),
     db.transaction.findMany({
       where: { workspaceId },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
@@ -63,14 +64,14 @@ export async function getOverview(workspaceId: string, period: Period, today: st
       include: { customer: { select: { name: true } } },
     }),
     db.event.findMany({ where: { workspaceId, endAt: { gte: now } }, include: eventInclude, orderBy: { startAt: "asc" }, take: 5 }),
+    // Rank every candidate (lightweight rows), then load full details for the top six only.
     db.task.findMany({
       where: {
         workspaceId,
         status: { not: "DONE" },
         OR: [{ priority: { in: ["URGENT", "HIGH"] } }, { dueDate: { lte: weekAhead } }],
       },
-      include: taskInclude,
-      take: 50,
+      select: { id: true, priority: true, dueDate: true },
     }),
     db.task.findMany({ where: { workspaceId }, orderBy: { updatedAt: "desc" }, take: 5, select: { id: true, title: true, updatedAt: true } }),
     db.project.findMany({ where: { workspaceId }, orderBy: { updatedAt: "desc" }, take: 5, select: { id: true, name: true, updatedAt: true } }),
@@ -138,7 +139,7 @@ export async function getOverview(workspaceId: string, period: Period, today: st
   const totalTasks = Object.values(byStatus).reduce((a, b) => a + b, 0);
   const openTasks = totalTasks - byStatus.DONE;
 
-  const sortedPriority = priorityTasks
+  const topIds = priorityTasks
     .map((t) => ({ t, overdue: !!t.dueDate && t.dueDate < todayDate }))
     .sort(
       (a, b) =>
@@ -147,7 +148,9 @@ export async function getOverview(workspaceId: string, period: Period, today: st
         (a.t.dueDate?.getTime() ?? Infinity) - (b.t.dueDate?.getTime() ?? Infinity),
     )
     .slice(0, 6)
-    .map((x) => x.t);
+    .map((x) => x.t.id);
+  const topTasks = topIds.length ? await db.task.findMany({ where: { id: { in: topIds } }, include: taskInclude }) : [];
+  const sortedPriority = topIds.map((id) => topTasks.find((t) => t.id === id)!).filter(Boolean);
 
   const recent: RecentRecord[] = [
     ...recentTasks.map((r) => ({ id: r.id, type: "task" as const, title: r.title, href: `/tasks?task=${r.id}`, updatedAt: r.updatedAt })),

@@ -16,7 +16,7 @@ import { Segmented, useUrlParams } from "@/components/shared/url-filters";
 import { cn } from "@/lib/utils";
 
 export type CalEvent = EventRecord & { customer: { name: string } | null; project: { name: string } | null };
-export type CalMarker = { id: string; kind: "task" | "project" | "content"; title: string; day: string; done?: boolean; href: string; time?: string };
+export type CalMarker = { id: string; kind: "task" | "project" | "content"; title: string; day: string; done?: boolean; href: string; time?: string; sortTime?: string };
 
 type Item =
   | { kind: "event"; id: string; title: string; sort: string; time: string; allDay: boolean; event: CalEvent }
@@ -70,7 +70,8 @@ export function CalendarView({
         });
       }
     }
-    for (const m of markers) push(m.day, { kind: m.kind, id: m.id, title: m.title, sort: m.time ? "1" + m.time : "00", time: m.time ?? "", marker: m });
+    // Sort keys are 24-hour "HH:mm" for both events and markers; untimed markers ("0…") lead the day.
+    for (const m of markers) push(m.day, { kind: m.kind, id: m.id, title: m.title, sort: m.sortTime ?? "0", time: m.time ?? "", marker: m });
     for (const list of map.values()) list.sort((a, b) => a.sort.localeCompare(b.sort));
     return map;
   }, [events, markers, range, tz]);
@@ -174,7 +175,7 @@ export function CalendarView({
                     </span>
                     <button
                       onClick={() => openCreate("event", { date: d })}
-                      className="hidden rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:block group-hover:block"
+                      className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                       aria-label={`Add event on ${d}`}
                     >
                       <Plus className="size-3.5" />

@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Trash2 } from "lucide-react";
 import { eventSchema, type EventFormValues, type EventInput } from "@/lib/validation";
-import { addDaysToKey, dateToZonedInput } from "@/lib/dates";
+import { addDaysToKey, dateToZonedInput, plusOneHour, todayKey } from "@/lib/dates";
 import { createEventAction, deleteEventAction, updateEventAction } from "@/server/actions/calendar";
 import { runClientAction } from "@/lib/client/actions";
 import { Dialog, DialogBody, DialogContent, DialogFooter } from "@/components/ui/dialog";
@@ -25,6 +25,7 @@ export type EventRecord = {
   taskId: string | null;
   projectId: string | null;
   customerId: string | null;
+  task?: { id: string; title: string } | null;
 };
 
 function toValues(e: EventRecord | null | undefined, tz: string, today: string, defaults?: CreateDefaults): EventFormValues {
@@ -69,8 +70,10 @@ export function EventDialog({
   event?: EventRecord | null;
   defaults?: CreateDefaults;
 }) {
-  const { options, workspace, today } = useApp();
+  const { options, workspace } = useApp();
   const tz = workspace.timezone;
+  // Computed now, not taken from the layout, so a tab left open overnight still defaults to the real today.
+  const today = React.useMemo(() => (open ? todayKey(tz) : ""), [open, tz]);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const form = useForm<EventFormValues, unknown, EventInput>({ resolver: zodResolver(eventSchema), defaultValues: toValues(event, tz, today, defaults) });
   const { register, handleSubmit, formState, reset, setError, getValues, watch, setValue } = form;
@@ -129,11 +132,7 @@ export function EventDialog({
                         onChange: (e) => {
                           // Keep the end after the start when the start moves past it.
                           const s = e.target.value as string;
-                          if (s && getValues("end") <= s) {
-                            const [d, t] = s.split("T");
-                            const h = Math.min(23, Number(t.slice(0, 2)) + 1);
-                            setValue("end", `${d}T${String(h).padStart(2, "0")}:${t.slice(3, 5)}`);
-                          }
+                          if (s && getValues("end") <= s) setValue("end", plusOneHour(s));
                         },
                       })}
                     />
@@ -183,6 +182,8 @@ export function EventDialog({
                 <Field label="Task" htmlFor="e-task">
                   <Select id="e-task" {...register("taskId")}>
                     <option value="">None</option>
+                    {/* Completed tasks aren't in the open-task list; keep an existing link visible and selectable. */}
+                    {event?.taskId && !options.tasks.some((t) => t.id === event.taskId) && <option value={event.taskId}>{event.task?.title ?? "Completed task"}</option>}
                     {options.tasks.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.title}

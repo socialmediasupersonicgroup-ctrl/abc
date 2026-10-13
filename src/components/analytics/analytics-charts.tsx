@@ -3,8 +3,7 @@
 import { endOfMonth, format, parseISO, startOfMonth, startOfYear, subMonths } from "date-fns";
 import { AreaSeriesChart, BarSeriesChart } from "@/components/charts/charts";
 import { useApp, useMoney } from "@/components/app/app-context";
-import { Input } from "@/components/ui/input";
-import { useUrlParams } from "@/components/shared/url-filters";
+import { UrlDateInput, useUrlParams } from "@/components/shared/url-filters";
 import { cn } from "@/lib/utils";
 
 type Row = Record<string, string | number>;
@@ -54,9 +53,9 @@ export function RangePicker({ from, to }: { from: string; to: string }) {
           {p.label}
         </button>
       ))}
-      <Input type="date" aria-label="From" value={from} max={to} onChange={(e) => e.target.value && set({ from: e.target.value })} className="h-8 w-[140px] text-[13px]" />
+      <UrlDateInput param="from" label="From" max={to} required />
       <span className="text-xs text-muted-foreground">to</span>
-      <Input type="date" aria-label="To" value={to} min={from} onChange={(e) => e.target.value && set({ to: e.target.value })} className="h-8 w-[140px] text-[13px]" />
+      <UrlDateInput param="to" label="To" min={from} required />
     </div>
   );
 }

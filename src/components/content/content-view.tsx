@@ -6,7 +6,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { CalendarDays, ChevronLeft, ChevronRight, Columns3, Copy, List, Megaphone, Plus } from "lucide-react";
 import { CONTENT_PLATFORMS, CONTENT_STATUS } from "@/lib/constants";
 import { addDaysToKey, instantToKey } from "@/lib/dates";
-import { shiftAnchor, visibleRange } from "@/lib/calendar";
+import { safeAnchor, shiftAnchor, visibleRange } from "@/lib/calendar";
 import { setContentStatusAction } from "@/server/actions/content";
 import { runClientAction } from "@/lib/client/actions";
 import { useApp } from "@/components/app/app-context";
@@ -215,7 +215,7 @@ function ContentCalendar({ items, onOpen }: { items: ContentRecord[]; onOpen: (i
   const { workspace, today, openCreate } = useApp();
   const tz = workspace.timezone;
   const { params, set } = useUrlParams();
-  const anchor = /^\d{4}-\d{2}-\d{2}$/.test(params.get("date") ?? "") ? params.get("date")! : today;
+  const anchor = safeAnchor(params.get("date") ?? "", today);
   const range = visibleRange("month", anchor, workspace.weekStartsOn === 0 ? 0 : 1);
   const days = Array.from({ length: 42 }, (_, i) => addDaysToKey(range.from, i));
   const byDay = new Map<string, ContentRecord[]>();
@@ -249,7 +249,7 @@ function ContentCalendar({ items, onOpen }: { items: ContentRecord[]; onOpen: (i
             <div key={d} className={cn("group min-h-[90px] border-b border-r p-1", (i + 1) % 7 === 0 && "border-r-0", d.slice(0, 7) !== anchor.slice(0, 7) && "bg-surface-2/40")}>
               <div className="flex items-center justify-between">
                 <span className={cn("flex size-6 items-center justify-center rounded-full text-xs", d === today && "bg-primary font-semibold text-primary-foreground")}>{Number(d.slice(8))}</span>
-                <button onClick={() => openCreate("content", { date: d })} className="hidden rounded p-0.5 text-muted-foreground hover:bg-accent group-hover:block" aria-label={`Plan content on ${d}`}>
+                <button onClick={() => openCreate("content", { date: d })} className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-accent focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100" aria-label={`Plan content on ${d}`}>
                   <Plus className="size-3.5" />
                 </button>
               </div>

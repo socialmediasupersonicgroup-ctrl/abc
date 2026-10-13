@@ -9,6 +9,7 @@ import { Ban, Download, MoreHorizontal, Pencil, Printer, Send, Trash2, Wallet } 
 import { paymentSchema, type PaymentFormValues, type PaymentInput } from "@/lib/validation";
 import { PAYMENT_METHODS } from "@/lib/constants";
 import { currencySymbol, minorToInput } from "@/lib/money";
+import { todayKey } from "@/lib/dates";
 import { deleteInvoiceAction, deletePaymentAction, recordPaymentAction, setInvoiceStatusAction } from "@/server/actions/finance";
 import { runClientAction } from "@/lib/client/actions";
 import { useApp, useMoney } from "@/components/app/app-context";
@@ -105,9 +106,13 @@ export function InvoiceActions({ id, status, storedStatus, balance, hasPayments,
 }
 
 export function PaymentDialog({ open, onOpenChange, invoiceId, balance }: { open: boolean; onOpenChange: (o: boolean) => void; invoiceId: string; balance: number }) {
-  const { today, workspace } = useApp();
+  const { workspace } = useApp();
   const money = useMoney();
-  const defaults = React.useMemo<PaymentFormValues>(() => ({ amount: minorToInput(balance), date: today, method: "Bank transfer", reference: "", notes: "" }), [balance, today]);
+  // "Today" is computed on open rather than taken from the layout, which can be a day old in a long-lived tab.
+  const defaults = React.useMemo<PaymentFormValues>(
+    () => ({ amount: minorToInput(balance), date: open ? todayKey(workspace.timezone) : "", method: "Bank transfer", reference: "", notes: "" }),
+    [balance, open, workspace.timezone],
+  );
   const form = useForm<PaymentFormValues, unknown, PaymentInput>({ resolver: zodResolver(paymentSchema), defaultValues: defaults });
   const { register, handleSubmit, formState, reset, setError, getValues } = form;
   React.useEffect(() => {

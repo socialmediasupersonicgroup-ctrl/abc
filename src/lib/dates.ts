@@ -1,4 +1,4 @@
-import { addDays, differenceInCalendarDays, parseISO } from "date-fns";
+import { differenceInCalendarDays, parseISO } from "date-fns";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 
 /**
@@ -11,8 +11,17 @@ import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 
 export const DEFAULT_TZ = "Asia/Kolkata";
 
+/** True only for real calendar dates ("2026-02-30" is rejected rather than rolled over to March). */
 export function isDateKey(value: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const d = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(d.getTime()) && d.getUTCFullYear() >= 1000 && d.toISOString().slice(0, 10) === value;
+}
+
+/** Validates a datetime-local value ("2026-10-12T14:30") including the calendar date. */
+export function isDateTimeLocal(value: string) {
+  const m = /^(\d{4}-\d{2}-\d{2})T([01]\d|2[0-3]):[0-5]\d$/.exec(value);
+  return !!m && isDateKey(m[1]);
 }
 
 /** "2026-10-12" -> Date at 2026-10-12T00:00:00Z */
@@ -35,8 +44,11 @@ export function instantToKey(date: Date, tz = DEFAULT_TZ): string {
   return formatInTimeZone(date, tz, "yyyy-MM-dd");
 }
 
+/** Pure UTC arithmetic, so the result never depends on the server's own time zone or DST. */
 export function addDaysToKey(key: string, days: number): string {
-  return dateToKey(addDays(keyToDate(key), days));
+  const d = keyToDate(key);
+  d.setUTCDate(d.getUTCDate() + days);
+  return dateToKey(d);
 }
 
 export function daysBetweenKeys(fromKey: string, toKey: string): number {
@@ -70,9 +82,17 @@ export function formatTime(date: Date | string, tz = DEFAULT_TZ): string {
 
 /** "2026-10-12T14:30" interpreted in tz -> UTC Date */
 export function zonedInputToDate(value: string, tz = DEFAULT_TZ): Date | null {
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return null;
+  if (!isDateTimeLocal(value)) return null;
   const d = fromZonedTime(value, tz);
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Adds one hour to a wall-clock "yyyy-MM-ddTHH:mm" value, rolling into the next day when needed (no zone math). */
+export function plusOneHour(value: string) {
+  const d = new Date(`${value}:00Z`);
+  if (Number.isNaN(d.getTime())) return value;
+  d.setUTCHours(d.getUTCHours() + 1);
+  return d.toISOString().slice(0, 16);
 }
 
 /** UTC Date -> "2026-10-12T14:30" in tz for <input type="datetime-local"> */

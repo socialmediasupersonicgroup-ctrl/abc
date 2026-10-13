@@ -1,27 +1,38 @@
 import { addMonths, format, parseISO, startOfMonth } from "date-fns";
 import { prisma } from "@/lib/db";
-import { keyToDate, addDaysToKey } from "@/lib/dates";
+import { keyToDate, addDaysToKey, DEFAULT_TZ, instantToKey, zonedDayStart } from "@/lib/dates";
 import { summarize, type DateRange } from "@/lib/calc/metrics";
 import { projectProgress } from "@/lib/calc/progress";
 import { effectiveInvoiceStatus, invoiceBalance } from "@/lib/calc/invoice";
 import type { Db } from "./shared";
 
+export const MAX_ANALYTICS_MONTHS = 60;
+
+/** Month buckets for the range; capped to the most recent 60 months (the page clamps the range to match). */
 function monthBuckets(range: DateRange) {
   const buckets: { key: string; label: string }[] = [];
-  let m = startOfMonth(parseISO(range.from));
   const end = startOfMonth(parseISO(range.to));
-  while (m <= end && buckets.length < 60) {
+  const earliest = addMonths(end, -(MAX_ANALYTICS_MONTHS - 1));
+  let m = startOfMonth(parseISO(range.from));
+  if (m < earliest) m = earliest;
+  while (m <= end) {
     buckets.push({ key: format(m, "yyyy-MM"), label: format(m, "MMM yy") });
     m = addMonths(m, 1);
   }
   return buckets;
 }
 
+/** Month of a date-only value (stored as UTC midnight). */
 const monthOf = (d: Date) => d.toISOString().slice(0, 7);
 
-export async function getAnalytics(workspaceId: string, range: DateRange, today: string, db: Db = prisma) {
+export async function getAnalytics(workspaceId: string, range: DateRange, today: string, tz = DEFAULT_TZ, db: Db = prisma) {
+  // Date-only columns (transaction date, invoice issue date) compare against UTC-midnight keys…
   const from = keyToDate(range.from);
   const toExclusive = keyToDate(addDaysToKey(range.to, 1));
+  // …while instants (createdAt, completedAt) use the workspace zone's midnights and months.
+  const fromInstant = zonedDayStart(range.from, tz);
+  const toInstantExclusive = zonedDayStart(addDaysToKey(range.to, 1), tz);
+  const monthOfInstant = (d: Date) => instantToKey(d, tz).slice(0, 7);
   const buckets = monthBuckets(range);
 
   const [txns, invoices, projects, tasksCreated, tasksCompleted, customersBefore, customersInRange, content] = await Promise.all([
@@ -36,10 +47,10 @@ export async function getAnalytics(workspaceId: string, range: DateRange, today:
       orderBy: { dueDate: { sort: "asc", nulls: "last" } },
       take: 12,
     }),
-    db.task.findMany({ where: { workspaceId, createdAt: { gte: from, lt: toExclusive } }, select: { createdAt: true } }),
-    db.task.findMany({ where: { workspaceId, completedAt: { gte: from, lt: toExclusive } }, select: { completedAt: true } }),
-    db.customer.count({ where: { workspaceId, createdAt: { lt: from } } }),
-    db.customer.findMany({ where: { workspaceId, createdAt: { gte: from, lt: toExclusive } }, select: { createdAt: true, status: true } }),
+    db.task.findMany({ where: { workspaceId, createdAt: { gte: fromInstant, lt: toInstantExclusive } }, select: { createdAt: true } }),
+    db.task.findMany({ where: { workspaceId, completedAt: { gte: fromInstant, lt: toInstantExclusive } }, select: { completedAt: true } }),
+    db.customer.count({ where: { workspaceId, createdAt: { lt: fromInstant } } }),
+    db.customer.findMany({ where: { workspaceId, createdAt: { gte: fromInstant, lt: toInstantExclusive } }, select: { createdAt: true, status: true } }),
     db.contentItem.findMany({ where: { workspaceId }, select: { status: true, scheduledAt: true, platform: true } }),
   ]);
 
@@ -69,11 +80,11 @@ export async function getAnalytics(workspaceId: string, range: DateRange, today:
   const taskSeries = buckets.map((b) => ({ ...b, created: 0, completed: 0 }));
   const tIndex = new Map(taskSeries.map((t) => [t.key, t]));
   for (const t of tasksCreated) {
-    const b = tIndex.get(monthOf(t.createdAt));
+    const b = tIndex.get(monthOfInstant(t.createdAt));
     if (b) b.created++;
   }
   for (const t of tasksCompleted) {
-    const b = tIndex.get(monthOf(t.completedAt!));
+    const b = tIndex.get(monthOfInstant(t.completedAt!));
     if (b) b.completed++;
   }
 
@@ -81,7 +92,7 @@ export async function getAnalytics(workspaceId: string, range: DateRange, today:
   const custSeries = buckets.map((b) => ({ ...b, added: 0, total: 0 }));
   const cIndex = new Map(custSeries.map((c) => [c.key, c]));
   for (const c of customersInRange) {
-    const b = cIndex.get(monthOf(c.createdAt));
+    const b = cIndex.get(monthOfInstant(c.createdAt));
     if (b) b.added++;
   }
   let running = customersBefore;

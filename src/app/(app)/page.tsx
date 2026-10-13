@@ -58,7 +58,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Sea
   const periodParam = str(sp.period) as Period;
   const period: Period = PERIODS.some((p) => p.value === periodParam) ? periodParam : "month";
   const now = new Date();
-  const o = await getOverview(ws.id, period, today, now);
+  const o = await getOverview(ws.id, period, today, now, tz);
   const money = (v: number) => formatMoney(v, currency);
   const periodLabel = PERIODS.find((p) => p.value === period)!.label.toLowerCase();
   const compareLabel = period === "month" ? "vs last month (same days)" : period === "quarter" ? "vs last quarter" : period === "year" ? "vs last year" : "vs prior 30 days";

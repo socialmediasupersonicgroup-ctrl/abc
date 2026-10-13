@@ -3,14 +3,13 @@ import {
   CONTENT_STATUS,
   CUSTOMER_STATUS,
   DISCOUNT_TYPES,
-  INVOICE_STATUS,
   PRIORITY,
   PROJECT_STATUS,
   TASK_STATUS,
   TRANSACTION_TYPE,
 } from "@/lib/constants";
 import { CURRENCY_CODES, MAX_MINOR, parseMoney, parsePercentToBps } from "@/lib/money";
-import { isDateKey } from "@/lib/dates";
+import { isDateKey, isDateTimeLocal } from "@/lib/dates";
 
 /**
  * Schemas operate on the plain values produced by forms (strings), and output normalised
@@ -119,6 +118,8 @@ export type ProjectFormValues = z.input<typeof projectSchema>;
 export type ProjectInput = z.output<typeof projectSchema>;
 
 // ---------------------------------------------------------------- Customers
+/** Shared by the customer form and the "add note" log so the two can never disagree. */
+export const CUSTOMER_NOTES_MAX = 50_000;
 export const customerSchema = z.object({
   name: requiredText("Name", 120),
   company: optionalText(120),
@@ -141,7 +142,7 @@ export const customerSchema = z.object({
   status: z.enum(CUSTOMER_STATUS.values),
   source: optionalText(60),
   dealValue: money("Deal value"),
-  notes: optionalText(10000),
+  notes: optionalText(CUSTOMER_NOTES_MAX),
   lastContactAt: optionalDateKey,
   nextFollowUpAt: optionalDateKey,
 });
@@ -233,11 +234,12 @@ export const paymentSchema = z.object({
 export type PaymentFormValues = z.input<typeof paymentSchema>;
 export type PaymentInput = z.output<typeof paymentSchema>;
 
-export const invoiceStatusSchema = z.enum(INVOICE_STATUS.values);
+/** Statuses a user can set by hand; PAID and OVERDUE are derived from payments and the due date. */
+export const invoiceStatusSchema = z.enum(["DRAFT", "SENT", "CANCELLED"]);
 
 // ---------------------------------------------------------------- Events
 const dateTimeLocal = (label: string) =>
-  z.string().trim().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, `${label} must be a valid date and time`);
+  z.string().trim().refine(isDateTimeLocal, { message: `${label} must be a valid date and time` });
 
 export const eventSchema = z
   .object({
@@ -269,7 +271,7 @@ export const contentSchema = z.object({
     .trim()
     .optional()
     .nullable()
-    .refine((v) => !v || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v), { message: "Enter a valid date and time" })
+    .refine((v) => !v || isDateTimeLocal(v), { message: "Enter a valid date and time" })
     .transform((v) => (v ? v : null)),
   status: z.enum(CONTENT_STATUS.values),
   caption: optionalText(5000),

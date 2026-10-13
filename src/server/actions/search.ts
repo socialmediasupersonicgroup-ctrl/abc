@@ -5,9 +5,9 @@ import { getContext } from "@/server/workspace";
 
 export async function searchAction(query: string) {
   if (typeof query !== "string") return [];
-  const { workspaceId, currency } = await getContext();
+  const { workspaceId, currency, tz } = await getContext();
   try {
-    return await globalSearch(workspaceId, query, currency, 5);
+    return await globalSearch(workspaceId, query, currency, 5, tz);
   } catch (err) {
     console.error("[nexus] search failed", err);
     return [];

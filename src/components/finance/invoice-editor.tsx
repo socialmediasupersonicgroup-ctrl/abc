@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useFieldArray, useForm } from "react-hook-form";
+import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Trash2 } from "lucide-react";
 import { invoiceSchema, type InvoiceFormValues, type InvoiceInput } from "@/lib/validation";
@@ -27,11 +27,12 @@ export function InvoiceEditor({ invoiceId, initial, amountPaid = 0 }: { invoiceI
   const errors = formState.errors;
   const sym = currencySymbol(workspace.currency);
 
-  const items = watch("items");
-  const discountType = watch("discountType");
-  const discountValue = watch("discountValue");
-  const taxRate = watch("taxRate");
-  const customerId = watch("customerId");
+  // useWatch returns a fresh copy on every change; watch("items") returns the same mutated array, which would freeze the memo.
+  const items = useWatch({ control, name: "items" });
+  const discountType = useWatch({ control, name: "discountType" });
+  const discountValue = useWatch({ control, name: "discountValue" });
+  const taxRate = useWatch({ control, name: "taxRate" });
+  const customerId = useWatch({ control, name: "customerId" });
 
   // Live preview of totals using the same calculation the server uses.
   const preview = React.useMemo(() => {
@@ -66,7 +67,17 @@ export function InvoiceEditor({ invoiceId, initial, amountPaid = 0 }: { invoiceI
           <CardContent className="grid gap-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Customer" htmlFor="inv-customer" error={errors.customerId?.message} required>
-                <Select id="inv-customer" {...register("customerId")} aria-invalid={!!errors.customerId}>
+                <Select
+                  id="inv-customer"
+                  {...register("customerId", {
+                    onChange: (e) => {
+                      // Drop a project that belongs to a different customer, so a hidden stale value is never saved.
+                      const project = options.projects.find((p) => p.id === getValues("projectId"));
+                      if (project?.customerId && project.customerId !== e.target.value) setValue("projectId", "");
+                    },
+                  })}
+                  aria-invalid={!!errors.customerId}
+                >
                   <option value="">Select a customer…</option>
                   {options.customers.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -262,7 +273,7 @@ export function InvoiceEditor({ invoiceId, initial, amountPaid = 0 }: { invoiceI
               <Button type="submit" loading={formState.isSubmitting} disabled={options.customers.length === 0}>
                 {invoiceId ? "Save invoice" : "Create invoice"}
               </Button>
-              <Button variant="outline" onClick={() => router.back()}>
+              <Button variant="outline" onClick={() => router.push(invoiceId ? `/finance/invoices/${invoiceId}` : "/finance/invoices")}>
                 Cancel
               </Button>
             </div>

@@ -147,6 +147,27 @@ test("invoice totals, payments and financial summaries stay consistent", async (
   await expect(page.getByTestId("inv-outstanding")).toHaveText("₹34,692.99");
 });
 
+test("invoice preview follows line edits made last", async ({ page }) => {
+  await open(page, "/finance/invoices/new");
+  await page.getByLabel("Line 1 unit price").fill("1000");
+  await expect(page.getByTestId("invoice-total-preview")).toHaveText("₹1,180.00");
+  // Editing quantity after everything else must still update the totals.
+  await page.getByLabel("Line 1 quantity").fill("3");
+  await expect(page.getByTestId("invoice-total-preview")).toHaveText("₹3,540.00");
+});
+
+test("search box keeps text typed after a pause", async ({ page }) => {
+  await open(page, "/customers");
+  const box = page.getByLabel("Search name, company, email, phone…");
+  await box.pressSequentially("Asha ");
+  await expect(page).toHaveURL(/q=Asha/);
+  await page.waitForTimeout(500);
+  await box.pressSequentially("Verma");
+  await expect(box).toHaveValue("Asha Verma");
+  await expect(page).toHaveURL(/q=Asha\+Verma|q=Asha%20Verma/);
+  await expect(page.getByTestId("customer-row")).toHaveCount(1);
+});
+
 test("expense transaction updates finance and dashboard", async ({ page }) => {
   await open(page, "/finance");
   await page.getByRole("button", { name: "Expense" }).click();

@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { formatMoney, formatMoneyCompact } from "@/lib/money";
+import { todayKey } from "@/lib/dates";
 
 export type WorkspaceInfo = {
   id: string;
@@ -53,6 +55,21 @@ export function AppProvider({
 }) {
   const [create, setCreate] = React.useState<Ctx["create"]>(null);
   const [paletteOpen, setPaletteOpen] = React.useState(false);
+  const router = useRouter();
+
+  // The layout (and its "today", alerts and options) isn't re-rendered on client navigation.
+  // When the tab regains focus on a new calendar day, refresh so dates and overdue states are current.
+  React.useEffect(() => {
+    const check = () => {
+      if (document.visibilityState === "visible" && todayKey(workspace.timezone) !== today) router.refresh();
+    };
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("focus", check);
+    return () => {
+      document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("focus", check);
+    };
+  }, [today, workspace.timezone, router]);
   const value = React.useMemo<Ctx>(
     () => ({
       workspace,

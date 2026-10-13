@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { transactionSchema, type TransactionFormValues, type TransactionInput } from "@/lib/validation";
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, PAYMENT_METHODS } from "@/lib/constants";
-import { dateToKey } from "@/lib/dates";
+import { dateToKey, todayKey } from "@/lib/dates";
 import { currencySymbol, minorToInput } from "@/lib/money";
 import { createTransactionAction, updateTransactionAction } from "@/server/actions/finance";
 import { runClientAction } from "@/lib/client/actions";
@@ -58,7 +58,9 @@ export function TransactionDialog({
   defaults?: CreateDefaults;
   categories?: string[];
 }) {
-  const { options, workspace, today } = useApp();
+  const { options, workspace } = useApp();
+  // Computed when the dialog opens, so a tab left open overnight still defaults to the real today.
+  const today = React.useMemo(() => (open ? todayKey(workspace.timezone) : ""), [open, workspace.timezone]);
   const form = useForm<TransactionFormValues, unknown, TransactionInput>({
     resolver: zodResolver(transactionSchema),
     defaultValues: toValues(transaction, today, defaults),

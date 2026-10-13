@@ -1,6 +1,6 @@
 import { getContext } from "@/server/workspace";
 import { authEnabled } from "@/lib/auth/session";
-import { listWorkspaces, workspaceStats } from "@/lib/services/workspaces";
+import { hasMoneyRecords, listWorkspaces, workspaceStats } from "@/lib/services/workspaces";
 import { minorToInput } from "@/lib/money";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/misc";
@@ -11,11 +11,12 @@ export const metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
   const { ws } = await getContext();
-  const [stats, workspaces] = await Promise.all([workspaceStats(ws.id), listWorkspaces()]);
+  const [stats, workspaces, currencyLocked] = await Promise.all([workspaceStats(ws.id), listWorkspaces(), hasMoneyRecords(ws.id)]);
   return (
     <div className="mx-auto max-w-4xl space-y-4">
       <PageHeader title="Settings" description={`Preferences for ${ws.name}`} />
       <WorkspaceForm
+        currencyLocked={currencyLocked}
         initial={{
           name: ws.name,
           currency: ws.currency as never,

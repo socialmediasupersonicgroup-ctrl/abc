@@ -16,8 +16,9 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
+import { useApp } from "@/components/app/app-context";
 
-export function WorkspaceForm({ initial }: { initial: WorkspaceFormValues }) {
+export function WorkspaceForm({ initial, currencyLocked }: { initial: WorkspaceFormValues; currencyLocked: boolean }) {
   const form = useForm<WorkspaceFormValues, unknown, WorkspaceInput>({ resolver: zodResolver(workspaceSchema), defaultValues: initial });
   const { register, handleSubmit, formState, setError, getValues, reset } = form;
   const e = formState.errors;
@@ -41,14 +42,23 @@ export function WorkspaceForm({ initial }: { initial: WorkspaceFormValues }) {
             <Field label="Workspace / business name" htmlFor="ws-name" error={e.name?.message} required hint="Shown on invoices.">
               <Input id="ws-name" {...register("name")} aria-invalid={!!e.name} />
             </Field>
-            <Field label="Default currency" htmlFor="ws-currency" hint="Used for new records and all summaries.">
-              <Select id="ws-currency" {...register("currency")}>
-                {SUPPORTED_CURRENCIES.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {c.code} — {c.label}
-                  </option>
-                ))}
-              </Select>
+            <Field
+              label="Currency"
+              htmlFor="ws-currency"
+              error={e.currency?.message}
+              hint={currencyLocked ? "Locked: this workspace already has amounts, and NEXUS doesn't convert currencies. Create a new workspace for another currency." : "Used for every amount in this workspace."}
+            >
+              {currencyLocked ? (
+                <Input id="ws-currency" readOnly aria-readonly {...register("currency")} className="bg-muted text-muted-foreground" />
+              ) : (
+                <Select id="ws-currency" {...register("currency")}>
+                  {SUPPORTED_CURRENCIES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.code} — {c.label}
+                    </option>
+                  ))}
+                </Select>
+              )}
             </Field>
             <Field label="Time zone" htmlFor="ws-tz" error={e.timezone?.message} hint="Calendar times and “today” use this zone.">
               <Select id="ws-tz" {...register("timezone")}>
@@ -134,6 +144,7 @@ export function ThemeCard() {
 
 export function DataCard({ workspaceName, isDemo, stats, workspaceCount }: { workspaceName: string; isDemo: boolean; stats: Record<string, number>; workspaceCount: number }) {
   const router = useRouter();
+  const { workspace } = useApp();
   const [dialog, setDialog] = React.useState<"demo" | "clear" | "delete" | null>(null);
   const [confirmText, setConfirmText] = React.useState("");
   React.useEffect(() => setConfirmText(""), [dialog]);
@@ -205,14 +216,17 @@ export function DataCard({ workspaceName, isDemo, stats, workspaceCount }: { wor
         title={dialog === "delete" ? "Delete this workspace?" : "Delete all workspace data?"}
         description={`This cannot be undone. Type “${workspaceName}” to confirm.`}
         confirmLabel={dialog === "delete" ? "Delete workspace" : "Delete all data"}
+        confirmDisabled={confirmText.trim() !== workspaceName}
         onConfirm={async () => {
           if (confirmText.trim() !== workspaceName) return false;
-          const res = await runClientAction(dialog === "delete" ? deleteWorkspaceAction(confirmText) : clearWorkspaceDataAction(confirmText));
+          const res = await runClientAction(
+            dialog === "delete" ? deleteWorkspaceAction(confirmText, workspace.id) : clearWorkspaceDataAction(confirmText, workspace.id),
+          );
           if (res) router.push("/");
           return !!res;
         }}
       >
-        <Field label="Workspace name" htmlFor="confirm-name">
+        <Field label="Workspace name" htmlFor="confirm-name" hint="Must match exactly, including capitals.">
           <Input id="confirm-name" value={confirmText} onChange={(e) => setConfirmText(e.target.value)} placeholder={workspaceName} autoComplete="off" />
         </Field>
       </ConfirmDialog>

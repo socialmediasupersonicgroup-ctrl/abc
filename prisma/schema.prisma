@@ -1,5 +1,7 @@
 // NEXUS — Business Operating System
-// Money is stored as integer minor units (paise for INR) to keep arithmetic exact.
+// Money is stored as whole minor units (paise for INR) to keep arithmetic exact. Money columns are
+// Float (64-bit) rather than Prisma Int, which is 32-bit (max ≈ ₹2.1 crore); every stored value is an
+// integer validated by the app, and doubles represent integers exactly up to 2^53.
 // Percentages (tax, discount) are stored in basis points (1800 = 18.00%).
 // Enumerations are stored as strings and validated in src/lib/constants.ts + zod schemas.
 
@@ -60,7 +62,7 @@ model Customer {
   phone          String?
   status         String    @default("LEAD")
   source         String?
-  dealValue      Int       @default(0)
+  dealValue      Float     @default(0)
   notes          String?
   lastContactAt  DateTime?
   nextFollowUpAt DateTime?
@@ -90,7 +92,7 @@ model Project {
   dueDate        DateTime?
   progressMode   String    @default("AUTO") // AUTO = from tasks, MANUAL = manualProgress
   manualProgress Int       @default(0)
-  budget         Int       @default(0)
+  budget         Float     @default(0)
   notes          String?
   customerId     String?
   customer       Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
@@ -138,7 +140,7 @@ model Transaction {
   workspaceId   String
   workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   description   String
-  amount        Int // always positive, minor units
+  amount        Float // always positive, whole minor units
   type          String // INCOME | EXPENSE
   category      String
   date          DateTime
@@ -174,14 +176,14 @@ model Invoice {
   dueDate        DateTime
   currency       String    @default("INR")
   discountType   String    @default("NONE") // NONE | PERCENT | FIXED
-  discountValue  Int       @default(0) // bps when PERCENT, minor units when FIXED
+  discountValue  Float     @default(0) // bps when PERCENT, minor units when FIXED
   taxRateBps     Int       @default(0)
   taxLabel       String    @default("GST")
-  subtotal       Int       @default(0)
-  discountAmount Int       @default(0)
-  taxAmount      Int       @default(0)
-  total          Int       @default(0)
-  amountPaid     Int       @default(0)
+  subtotal       Float     @default(0)
+  discountAmount Float     @default(0)
+  taxAmount      Float     @default(0)
+  total          Float     @default(0)
+  amountPaid     Float     @default(0)
   notes          String?
   terms          String?
   createdAt      DateTime  @default(now())
@@ -201,8 +203,8 @@ model InvoiceItem {
   invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   description String
   quantity    Float
-  unitPrice   Int
-  lineTotal   Int
+  unitPrice   Float
+  lineTotal   Float
   sortOrder   Int     @default(0)
 }
 
@@ -210,7 +212,7 @@ model Payment {
   id          String       @id @default(cuid())
   invoiceId   String
   invoice     Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
-  amount      Int
+  amount      Float
   date        DateTime
   method      String?
   reference   String?

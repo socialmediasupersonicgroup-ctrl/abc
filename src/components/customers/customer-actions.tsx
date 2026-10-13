@@ -88,9 +88,11 @@ export function CopyButton({ value, label }: { value: string; label: string }) {
 
 export function FollowUpCard({ customerId, next }: { customerId: string; next: string | null }) {
   const { today } = useApp();
-  const [date, setDate] = React.useState(next ?? addDaysToKey(today, 7));
+  // A due or overdue follow-up is what's being completed now, so suggest a fresh date rather than re-saving it.
+  const suggested = next && next > today ? next : addDaysToKey(today, 7);
+  const [date, setDate] = React.useState(suggested);
   const [pending, setPending] = React.useState(false);
-  React.useEffect(() => setDate(next ?? addDaysToKey(today, 7)), [next, today]);
+  React.useEffect(() => setDate(suggested), [suggested]);
   return (
     <div className="space-y-3">
       <Field label="Next follow-up" htmlFor="fu-date">

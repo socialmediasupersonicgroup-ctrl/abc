@@ -52,7 +52,9 @@ export async function getProject(workspaceId: string, id: string, db: Db = prism
     },
   });
   if (!project) throw new NotFoundError("Project");
-  return { ...project, progress: projectProgress(project, project.tasks) };
+  // Totals use aggregates over all linked records; the include above only loads the latest few for display.
+  const spent = await db.transaction.aggregate({ where: { workspaceId, projectId: id, type: "EXPENSE" }, _sum: { amount: true } });
+  return { ...project, spent: spent._sum.amount ?? 0, progress: projectProgress(project, project.tasks) };
 }
 export type ProjectDetail = Awaited<ReturnType<typeof getProject>>;
 

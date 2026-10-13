@@ -60,20 +60,13 @@ export function TaskDialog({
   const { options, workspace } = useApp();
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const form = useForm<TaskFormValues, unknown, TaskInput>({ resolver: zodResolver(taskSchema), defaultValues: toValues(task, defaults) });
-  const { register, handleSubmit, formState, reset, setError, getValues, watch, setValue } = form;
+  const { register, handleSubmit, formState, reset, setError, getValues, setValue } = form;
   const errors = formState.errors;
 
   React.useEffect(() => {
     if (open) reset(toValues(task, defaults));
   }, [open, task, defaults, reset]);
 
-  const projectId = watch("projectId");
-  // Selecting a project pre-fills its customer when none is chosen.
-  React.useEffect(() => {
-    if (!projectId || getValues("customerId")) return;
-    const p = options.projects.find((x) => x.id === projectId);
-    if (p?.customerId) setValue("customerId", p.customerId);
-  }, [projectId, options.projects, getValues, setValue]);
 
   const onSubmit = handleSubmit(async () => {
     const values = getValues();
@@ -123,7 +116,17 @@ export function TaskDialog({
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Project" htmlFor="task-project">
-                  <Select id="task-project" {...register("projectId")}>
+                  <Select
+                    id="task-project"
+                    {...register("projectId", {
+                      // Picking a project pre-fills its customer when none is chosen (user changes only, never on open).
+                      onChange: (e) => {
+                        if (getValues("customerId")) return;
+                        const p = options.projects.find((x) => x.id === e.target.value);
+                        if (p?.customerId) setValue("customerId", p.customerId);
+                      },
+                    })}
+                  >
                     <option value="">No project</option>
                     {options.projects.map((p) => (
                       <option key={p.id} value={p.id}>

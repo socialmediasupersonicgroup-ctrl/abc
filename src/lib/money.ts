@@ -22,17 +22,32 @@ export function localeForCurrency(code: string): string {
   return SUPPORTED_CURRENCIES.find((c) => c.code === code)?.locale ?? "en-IN";
 }
 
-/** Maximum amount we accept (100 crore in major units) to stay far away from Number.MAX_SAFE_INTEGER. */
+/**
+ * Largest single amount we accept: ₹1,00,00,00,000.00 (100 crore) / 1,000,000,000.00 in other currencies.
+ * Columns are 64-bit floats holding whole minor units, which are exact up to 2^53.
+ */
 export const MAX_MINOR = 1_000_000_000_00;
+/** Ceiling for computed invoice totals (many lines × large quantities). */
+export const MAX_TOTAL_MINOR = 1_000_000_000_000_00;
 
 /**
- * Parses a user supplied decimal string ("1,23,456.78", "1234.5", "₹ 99") into minor units.
- * Returns null for invalid input or more than two decimal places.
+ * Parses a user supplied decimal string into minor units. Accepts
+ * "1234.5", "1,23,456.78" / "1,234,567.89" (grouping commas), "1.234,56" (European grouping)
+ * and "49,99" (a single comma followed by 1–2 digits is a decimal comma in every locale).
+ * Returns null for anything ambiguous or with more than two decimal places.
  */
 export function parseMoney(input: string | number | null | undefined): number | null {
   if (input == null) return null;
-  const raw = String(input).replace(/[\s,₹$€£]/g, "").replace(/^(INR|USD|EUR|GBP|AED|SGD|AUD|CAD)/i, "");
+  let raw = String(input).replace(/[\s\u00a0₹$€£]/g, "").replace(/^(INR|USD|EUR|GBP|AED|SGD|AUD|CAD)/i, "");
   if (raw === "") return null;
+  if (/^-?\d+,\d{1,2}$/.test(raw)) {
+    raw = raw.replace(",", ".");
+  } else if (/^-?\d{1,3}(\.\d{3})+,\d{1,2}$/.test(raw)) {
+    raw = raw.replace(/\./g, "").replace(",", ".");
+  } else if (raw.includes(",")) {
+    if (!/^-?\d{1,3}(,\d{2,3})+(\.\d{0,2})?$/.test(raw)) return null;
+    raw = raw.replace(/,/g, "");
+  }
   const match = /^(-)?(\d+)(?:\.(\d{0,2}))?$/.exec(raw);
   if (!match) return null;
   const [, sign, whole, frac = ""] = match;
@@ -96,12 +111,12 @@ export function formatMoneyCompact(minor: number, currency = "INR"): string {
           [1e3, "K"],
         ];
   const symbol = currencySymbol(currency);
+  // Largest unit whose rounded value is at least 1 (the 0.9995 factor promotes 99,950 to "1L", not "100K").
   for (const [value, suffix] of steps) {
-    if (abs >= value) {
-      const n = abs / value;
-      const text = n >= 100 ? Math.round(n).toString() : (Math.round(n * 10) / 10).toString();
-      return `${sign}${symbol}${text}${suffix}`;
-    }
+    if (abs < value * 0.9995) continue;
+    const n = abs / value;
+    const text = n >= 100 ? Math.round(n).toString() : (Math.round(n * 10) / 10).toString();
+    return `${sign}${symbol}${text}${suffix}`;
   }
   return `${sign}${symbol}${Math.round(abs)}`;
 }

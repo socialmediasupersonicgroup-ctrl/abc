@@ -50,7 +50,22 @@ export async function pruneOrphanTags(workspaceId: string, db: Db = prisma) {
   await db.tag.deleteMany({ where: { workspaceId, tasks: { none: {} }, notes: { none: {} } } });
 }
 
+/**
+ * Case-insensitive "contains" filter. SQLite LIKE treats % and _ as wildcards and Prisma cannot escape
+ * them, so for such queries we match the longest literal segment (a superset; exact-match callers
+ * post-filter with textIncludes). A query made only of wildcard characters matches nothing.
+ */
 export function containsText(q: string | undefined | null) {
   const v = q?.trim();
-  return v ? { contains: v } : undefined;
+  if (!v) return undefined;
+  if (!/[%_]/.test(v)) return { contains: v };
+  const longest = v.split(/[%_]+/).reduce((a, b) => (b.trim().length > a.length ? b.trim() : a), "");
+  // A sentinel no real text contains (not NUL, which SQLite would truncate into an empty pattern).
+  return { contains: longest || "￿￾" };
+}
+
+/** Exact, case-insensitive substring test used to post-filter wildcard queries. */
+export function textIncludes(q: string, ...values: (string | null | undefined)[]) {
+  const needle = q.trim().toLowerCase();
+  return values.some((v) => !!v && v.toLowerCase().includes(needle));
 }

@@ -38,7 +38,10 @@ export function eventTimes(input: Pick<EventInput, "allDay" | "start" | "end">, 
     const startKey = input.start.slice(0, 10);
     const endKey = input.end.slice(0, 10);
     // All-day events end at the start of the day after the last day (exclusive end).
-    return { startAt: zonedDayStart(startKey, tz), endAt: zonedDayStart(addDaysToKey(endKey, 1), tz) };
+    const startAt = zonedDayStart(startKey, tz);
+    const endAt = zonedDayStart(addDaysToKey(endKey, 1), tz);
+    if (endAt <= startAt) throw new AppError("End must be on or after the start date.", { end: "End must be on or after the start date" });
+    return { startAt, endAt };
   }
   const startAt = zonedInputToDate(input.start, tz);
   const endAt = zonedInputToDate(input.end, tz);

@@ -12,12 +12,11 @@ import { useApp, useMoney } from "@/components/app/app-context";
 import { TransactionDialog, type TransactionRecord } from "@/components/forms/transaction-form";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/misc";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { ClearFilters, SearchFilter, SelectFilter, useUrlParams } from "@/components/shared/url-filters";
+import { ClearFilters, SearchFilter, SelectFilter, UrlDateInput, useUrlParams } from "@/components/shared/url-filters";
 import { cn } from "@/lib/utils";
 
 export type TransactionItem = TransactionRecord & {
@@ -41,15 +40,9 @@ function DateRangeFilter() {
   ];
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Input
-        type="date"
-        aria-label="From date"
-        value={params.get("from") ?? ""}
-        onChange={(e) => set({ from: e.target.value || null })}
-        className="h-8 w-[140px] text-[13px]"
-      />
+      <UrlDateInput param="from" label="From date" max={params.get("to") ?? undefined} />
       <span className="text-xs text-muted-foreground">to</span>
-      <Input type="date" aria-label="To date" value={params.get("to") ?? ""} onChange={(e) => set({ to: e.target.value || null })} className="h-8 w-[140px] text-[13px]" />
+      <UrlDateInput param="to" label="To date" min={params.get("from") ?? undefined} />
       {presets.map((p) => {
         const active = params.get("from") === p.from && params.get("to") === p.to;
         return (

@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { keyToDate } from "@/lib/dates";
 import { projectProgress } from "@/lib/calc/progress";
-import type { CustomerInput } from "@/lib/validation";
+import { CUSTOMER_NOTES_MAX, type CustomerInput } from "@/lib/validation";
 import { AppError, NotFoundError } from "./errors";
 import { containsText, toDate, type Db } from "./shared";
 import { taskInclude } from "./tasks";
@@ -115,6 +115,9 @@ export async function appendCustomerNote(workspaceId: string, id: string, text: 
   const customer = await db.customer.findFirst({ where: { id, workspaceId }, select: { notes: true } });
   if (!customer) throw new NotFoundError("Customer");
   const entry = `[${stamp}] ${text.trim()}`;
+  if (entry.length + 2 + (customer.notes?.length ?? 0) > CUSTOMER_NOTES_MAX) {
+    throw new AppError("This customer's notes are full. Edit the customer to trim older entries, or keep longer history in a linked note.");
+  }
   return db.customer.update({
     where: { id },
     data: { notes: customer.notes ? `${entry}\n\n${customer.notes}` : entry },

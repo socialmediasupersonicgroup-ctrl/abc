@@ -6,6 +6,7 @@ import { Search, X } from "lucide-react";
 import { Input, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { isDateKey } from "@/lib/dates";
 
 /** Updates URL search params (filters live in the URL so they survive reloads and can be shared). */
 export function useUrlParams() {
@@ -34,16 +35,23 @@ export function SearchFilter({ placeholder = "Search…", className, param = "q"
   const { params, set } = useUrlParams();
   const urlValue = params.get(param) ?? "";
   const [value, setValue] = React.useState(urlValue);
-  const first = React.useRef(true);
+  // The last value this input wrote to the URL. When the URL catches up with it, keep what the user has
+  // typed since (including trailing spaces); only outside changes (back/forward, "Clear") overwrite the box.
+  const pushed = React.useRef<string | null>(null);
 
-  React.useEffect(() => setValue(urlValue), [urlValue]);
   React.useEffect(() => {
-    if (first.current) {
-      first.current = false;
-      return;
-    }
-    if (value === urlValue) return;
-    const t = setTimeout(() => set({ [param]: value.trim() || null }, { replace: true }), 300);
+    if (pushed.current !== null && urlValue === pushed.current) return;
+    pushed.current = null;
+    setValue(urlValue);
+  }, [urlValue]);
+
+  React.useEffect(() => {
+    const next = value.trim();
+    if (next === urlValue) return;
+    const t = setTimeout(() => {
+      pushed.current = next;
+      set({ [param]: next || null }, { replace: true });
+    }, 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
@@ -60,6 +68,54 @@ export function SearchFilter({ placeholder = "Search…", className, param = "q"
         aria-label={placeholder}
       />
     </div>
+  );
+}
+
+/**
+ * Date input bound to a URL param. Edits stay local while typing (so partial keyboard entry isn't
+ * reverted or pushed to history) and are committed on change of a complete, valid date, on blur or Enter.
+ */
+export function UrlDateInput({
+  param,
+  label,
+  className,
+  min,
+  max,
+  required,
+}: {
+  param: string;
+  label: string;
+  className?: string;
+  min?: string;
+  max?: string;
+  required?: boolean;
+}) {
+  const { params, set } = useUrlParams();
+  const urlValue = params.get(param) ?? "";
+  const [value, setValue] = React.useState(urlValue);
+  React.useEffect(() => setValue(urlValue), [urlValue]);
+
+  const commit = (v: string) => {
+    if (v === urlValue) return;
+    if (v === "") {
+      if (!required) set({ [param]: null }, { replace: true });
+      return;
+    }
+    if (isDateKey(v)) set({ [param]: v }, { replace: true });
+  };
+
+  return (
+    <Input
+      type="date"
+      aria-label={label}
+      value={value}
+      min={min}
+      max={max}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => commit(value)}
+      onKeyDown={(e) => e.key === "Enter" && commit(value)}
+      className={cn("h-8 w-[150px] text-[13px]", className)}
+    />
   );
 }
 

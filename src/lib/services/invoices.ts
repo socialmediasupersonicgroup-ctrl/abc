@@ -2,13 +2,38 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { INVOICE_PAYMENT_CATEGORY, type InvoiceStatus } from "@/lib/constants";
 import { keyToDate } from "@/lib/dates";
-import { formatMoney } from "@/lib/money";
+import { formatMoney, MAX_TOTAL_MINOR } from "@/lib/money";
 import { calculateInvoiceTotals, effectiveInvoiceStatus, invoiceBalance, statusAfterPayment } from "@/lib/calc/invoice";
 import type { InvoiceInput, PaymentInput } from "@/lib/validation";
 import { AppError, NotFoundError } from "./errors";
 import { assertLinks, containsText, type Db } from "./shared";
 
 export type InvoiceFilters = { q?: string; status?: string; customerId?: string; sort?: string };
+
+export const INVOICE_LIST_LIMIT = 300;
+
+/** Workspace-wide invoice totals, computed over every invoice (not a capped list). */
+export async function invoiceSummary(workspaceId: string, today: string, db: Db = prisma) {
+  const rows = await db.invoice.findMany({ where: { workspaceId }, select: { status: true, total: true, amountPaid: true, dueDate: true } });
+  let invoiced = 0;
+  let collected = 0;
+  let outstanding = 0;
+  let overdue = 0;
+  let issued = 0;
+  let drafts = 0;
+  for (const inv of rows) {
+    const s = effectiveInvoiceStatus(inv, today);
+    if (s === "DRAFT") drafts++;
+    if (s === "DRAFT" || s === "CANCELLED") continue;
+    issued++;
+    invoiced += inv.total;
+    collected += inv.amountPaid;
+    const bal = invoiceBalance(inv.total, inv.amountPaid);
+    outstanding += bal;
+    if (s === "OVERDUE") overdue += bal;
+  }
+  return { invoiced, collected, outstanding, overdue, issued, drafts, count: rows.length };
+}
 
 /**
  * Status filters use the *effective* status (PAID/OVERDUE are derived from payments and due dates),
@@ -24,9 +49,9 @@ function statusWhere(status: string, today: string): Prisma.InvoiceWhereInput {
       // Stored status is kept in sync with payments (see statusAfterPayment).
       return { status: "PAID" };
     case "OVERDUE":
-      return { OR: [{ status: "OVERDUE" }, { status: "SENT", dueDate: { lt: todayDate } }] };
+      return { status: { in: ["SENT", "OVERDUE"] }, dueDate: { lt: todayDate } };
     case "SENT":
-      return { status: "SENT", dueDate: { gte: todayDate } };
+      return { status: { in: ["SENT", "OVERDUE"] }, dueDate: { gte: todayDate } };
     case "OUTSTANDING":
       return { status: { in: ["SENT", "OVERDUE"] } };
     default:
@@ -50,7 +75,7 @@ export async function listInvoices(workspaceId: string, filters: InvoiceFilters,
   const invoices = await db.invoice.findMany({
     where,
     orderBy,
-    take: 300,
+    take: INVOICE_LIST_LIMIT,
     include: { customer: { select: { id: true, name: true, company: true } }, project: { select: { id: true, name: true } } },
   });
   return invoices.map((inv) => ({
@@ -81,14 +106,20 @@ export async function getInvoice(workspaceId: string, id: string, today: string,
 }
 export type InvoiceDetail = Awaited<ReturnType<typeof getInvoice>>;
 
+/** Next number in the "<prefix><sequence>" series. Only numbers with exactly this prefix count. */
 export async function nextInvoiceNumber(workspaceId: string, prefix: string, db: Db = prisma) {
-  const invoices = await db.invoice.findMany({ where: { workspaceId }, select: { number: true } });
+  const invoices = await db.invoice.findMany({ where: { workspaceId, number: { startsWith: prefix } }, select: { number: true } });
+  const pattern = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\d{1,9})$`);
   let max = 0;
   for (const { number } of invoices) {
-    const m = /(\d+)\s*$/.exec(number);
+    const m = pattern.exec(number.trim());
     if (m) max = Math.max(max, Number(m[1]));
   }
-  return `${prefix}${String(max + 1).padStart(4, "0")}`;
+  let candidate = max + 1;
+  // Skip numbers taken by manually entered invoices.
+  const taken = new Set(invoices.map((i) => i.number));
+  while (taken.has(`${prefix}${String(candidate).padStart(4, "0")}`)) candidate++;
+  return `${prefix}${String(candidate).padStart(4, "0")}`;
 }
 
 function computed(input: InvoiceInput) {
@@ -98,6 +129,9 @@ function computed(input: InvoiceInput) {
     discountValue: input.discountValue,
     taxRateBps: input.taxRateBps,
   });
+  if ([totals.total, totals.subtotal, ...totals.lineTotals].some((v) => !Number.isSafeInteger(v) || v > MAX_TOTAL_MINOR)) {
+    throw new AppError("This invoice total is too large. Split it into smaller invoices.");
+  }
   return {
     totals,
     items: input.items.map((item, i) => ({
@@ -110,6 +144,15 @@ function computed(input: InvoiceInput) {
   };
 }
 
+/** A project that belongs to a customer can only be billed to that customer. */
+async function assertProjectMatchesCustomer(workspaceId: string, projectId: string | null, customerId: string, db: Db) {
+  if (!projectId) return;
+  const project = await db.project.findFirst({ where: { id: projectId, workspaceId }, select: { customerId: true, name: true } });
+  if (project?.customerId && project.customerId !== customerId) {
+    throw new AppError(`“${project.name}” belongs to a different customer. Choose another project or none.`, { projectId: "Project belongs to a different customer" });
+  }
+}
+
 async function assertNumberFree(workspaceId: string, number: string, excludeId: string | null, db: Db) {
   const clash = await db.invoice.findFirst({ where: { workspaceId, number, ...(excludeId ? { NOT: { id: excludeId } } : {}) } });
   if (clash) throw new AppError(`Invoice number ${number} is already in use.`, { number: "This number is already in use" });
@@ -117,6 +160,7 @@ async function assertNumberFree(workspaceId: string, number: string, excludeId: 
 
 export async function createInvoice(workspaceId: string, currency: string, input: InvoiceInput, db: PrismaClient = prisma) {
   await assertLinks(workspaceId, { customerId: input.customerId, projectId: input.projectId }, db);
+  await assertProjectMatchesCustomer(workspaceId, input.projectId, input.customerId, db);
   await assertNumberFree(workspaceId, input.number, null, db);
   const { totals, items } = computed(input);
   return db.invoice.create({
@@ -125,7 +169,7 @@ export async function createInvoice(workspaceId: string, currency: string, input
       number: input.number,
       customerId: input.customerId,
       projectId: input.projectId,
-      status: input.status,
+      status: statusAfterPayment(input.status, totals.total, 0),
       issueDate: keyToDate(input.issueDate),
       dueDate: keyToDate(input.dueDate),
       currency,
@@ -148,6 +192,7 @@ export async function updateInvoice(workspaceId: string, id: string, input: Invo
   const existing = await db.invoice.findFirst({ where: { id, workspaceId }, select: { amountPaid: true, currency: true } });
   if (!existing) throw new NotFoundError("Invoice");
   await assertLinks(workspaceId, { customerId: input.customerId, projectId: input.projectId }, db);
+  await assertProjectMatchesCustomer(workspaceId, input.projectId, input.customerId, db);
   await assertNumberFree(workspaceId, input.number, id, db);
   const { totals, items } = computed(input);
   if (existing.amountPaid > totals.total) {
@@ -164,6 +209,11 @@ export async function updateInvoice(workspaceId: string, id: string, input: Invo
   const status = statusAfterPayment(input.status, totals.total, existing.amountPaid);
   return db.$transaction(async (tx) => {
     await tx.invoiceItem.deleteMany({ where: { invoiceId: id } });
+    // Keep payment-generated income transactions consistent with the invoice they belong to.
+    await tx.transaction.updateMany({
+      where: { workspaceId, payment: { invoiceId: id } },
+      data: { customerId: input.customerId, projectId: input.projectId, description: `Payment for ${input.number}` },
+    });
     return tx.invoice.update({
       where: { id },
       data: {
@@ -189,19 +239,14 @@ export async function updateInvoice(workspaceId: string, id: string, input: Invo
   });
 }
 
-export async function setInvoiceStatus(workspaceId: string, id: string, status: InvoiceStatus, db: Db = prisma) {
+/** Manual status changes. PAID and OVERDUE are derived and cannot be set directly. */
+export async function setInvoiceStatus(workspaceId: string, id: string, status: "DRAFT" | "SENT" | "CANCELLED", db: Db = prisma) {
   const inv = await db.invoice.findFirst({ where: { id, workspaceId }, select: { amountPaid: true, total: true } });
   if (!inv) throw new NotFoundError("Invoice");
-  if (status === "PAID" && inv.amountPaid < inv.total) {
-    throw new AppError("Record a payment to mark this invoice as paid. Paid status is set automatically once payments cover the total.");
-  }
   if ((status === "CANCELLED" || status === "DRAFT") && inv.amountPaid > 0) {
     throw new AppError("This invoice has recorded payments. Remove them first.");
   }
-  if (status === "SENT" && inv.amountPaid >= inv.total && inv.total > 0) {
-    throw new AppError("This invoice is fully paid.");
-  }
-  return db.invoice.update({ where: { id }, data: { status } });
+  return db.invoice.update({ where: { id }, data: { status: statusAfterPayment(status, inv.total, inv.amountPaid) } });
 }
 
 export async function deleteInvoice(workspaceId: string, id: string, db: Db = prisma) {

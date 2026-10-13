@@ -27,6 +27,7 @@ export function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onN
                   href={item.href}
                   onClick={onNavigate}
                   aria-current={active ? "page" : undefined}
+                  aria-label={collapsed ? item.label : undefined}
                   className={cn(
                     "group flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",

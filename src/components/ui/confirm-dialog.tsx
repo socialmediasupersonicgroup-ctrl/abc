@@ -16,6 +16,7 @@ export function ConfirmDialog({
   confirmLabel = "Delete",
   destructive = true,
   onConfirm,
+  confirmDisabled,
   children,
 }: {
   open: boolean;
@@ -25,6 +26,8 @@ export function ConfirmDialog({
   confirmLabel?: string;
   destructive?: boolean;
   onConfirm: () => Promise<boolean | void> | boolean | void;
+  /** Keeps the confirm button disabled, e.g. until the user types a confirmation phrase. */
+  confirmDisabled?: boolean;
   children?: React.ReactNode;
 }) {
   const [pending, setPending] = React.useState(false);
@@ -39,6 +42,7 @@ export function ConfirmDialog({
           <Button
             variant={destructive ? "destructive" : "default"}
             loading={pending}
+            disabled={confirmDisabled}
             onClick={async () => {
               setPending(true);
               try {

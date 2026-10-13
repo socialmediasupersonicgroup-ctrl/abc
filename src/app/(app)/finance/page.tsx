@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { getContext } from "@/server/workspace";
 import { listTransactions, transactionCategories, type TransactionFilters } from "@/lib/services/transactions";
 import { str, type SearchParams } from "@/server/load";
@@ -25,6 +26,12 @@ export default async function FinancePage({ searchParams }: { searchParams: Sear
   };
   const page = Math.max(1, Number.parseInt(str(sp.page) || "1", 10) || 1);
   const [data, categories] = await Promise.all([listTransactions(workspaceId, filters, page, 50), transactionCategories(workspaceId)]);
+  // Past the last page (e.g. after deleting its only row): go to the last page that has rows.
+  if (data.rows.length === 0 && data.total > 0 && page > 1) {
+    const qs = new URLSearchParams(Object.entries(sp).flatMap(([k, v]) => (typeof v === "string" && k !== "page" ? [[k, v]] : [])));
+    qs.set("page", String(Math.ceil(data.total / data.pageSize)));
+    redirect(`/finance?${qs.toString()}`);
+  }
   return (
     <>
       <PageHeader

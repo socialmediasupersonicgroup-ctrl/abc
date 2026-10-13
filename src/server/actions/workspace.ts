@@ -49,17 +49,24 @@ export async function loadDemoWorkspaceAction() {
   }, "Demo workspace ready");
 }
 
-export async function clearWorkspaceDataAction(confirmName: string) {
+/** Guards against a stale tab acting on whichever workspace another tab switched to. */
+function assertSameWorkspace(expectedId: string, actualId: string) {
+  if (expectedId !== actualId) throw new AppError("You switched workspaces in another tab. Reload this page and try again.");
+}
+
+export async function clearWorkspaceDataAction(confirmName: string, workspaceId: string) {
   return runAction(async () => {
     const { ws } = await getContext();
+    assertSameWorkspace(workspaceId, ws.id);
     if (confirmName.trim() !== ws.name) throw new AppError("The workspace name you typed does not match.");
     await workspaces.clearWorkspaceData(ws.id);
   }, "All workspace data deleted");
 }
 
-export async function deleteWorkspaceAction(confirmName: string) {
+export async function deleteWorkspaceAction(confirmName: string, workspaceId: string) {
   return runAction(async () => {
     const { ws } = await getContext();
+    assertSameWorkspace(workspaceId, ws.id);
     if (confirmName.trim() !== ws.name) throw new AppError("The workspace name you typed does not match.");
     await workspaces.deleteWorkspace(ws.id);
     const next = await prisma.workspace.findFirst({ orderBy: { createdAt: "asc" } });

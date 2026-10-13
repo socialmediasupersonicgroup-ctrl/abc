@@ -69,16 +69,20 @@ export function effectiveInvoiceStatus(
 ): InvoiceStatus {
   const status = inv.status as InvoiceStatus;
   if (status === "DRAFT" || status === "CANCELLED") return status;
-  if (inv.total > 0 && inv.amountPaid >= inv.total) return "PAID";
+  // Issued invoices with nothing left to pay (including zero-total ones) are paid, never overdue.
+  if (inv.amountPaid >= inv.total) return "PAID";
   const dueKey = (typeof inv.dueDate === "string" ? inv.dueDate : inv.dueDate.toISOString()).slice(0, 10);
   if (dueKey < today) return "OVERDUE";
   return status === "PAID" ? "SENT" : status;
 }
 
-/** Stored status after the paid amount changes. */
+/**
+ * Stored status for an invoice given its intended status and paid amount.
+ * Only DRAFT, SENT, PAID and CANCELLED are ever stored; OVERDUE is always derived from the due date.
+ */
 export function statusAfterPayment(current: string, total: number, amountPaid: number): InvoiceStatus {
   if (current === "CANCELLED") return "CANCELLED";
-  if (total > 0 && amountPaid >= total) return "PAID";
-  if (current === "PAID" || current === "DRAFT") return "SENT";
-  return current as InvoiceStatus;
+  if (current === "DRAFT" && amountPaid === 0) return "DRAFT";
+  if (amountPaid >= total) return "PAID";
+  return "SENT";
 }

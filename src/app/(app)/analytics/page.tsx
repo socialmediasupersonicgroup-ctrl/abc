@@ -2,7 +2,7 @@ import Link from "next/link";
 import { format, parseISO, startOfMonth, subMonths } from "date-fns";
 import { BarChart3, CheckSquare, FileText, FolderKanban, Megaphone, Users, Wallet } from "lucide-react";
 import { getContext } from "@/server/workspace";
-import { getAnalytics } from "@/lib/services/analytics";
+import { getAnalytics, MAX_ANALYTICS_MONTHS } from "@/lib/services/analytics";
 import { str, type SearchParams } from "@/server/load";
 import { isDateKey, formatDate } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
@@ -41,18 +41,25 @@ function topFive(items: { name: string; value: number }[]) {
 
 export default async function AnalyticsPage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
-  const { workspaceId, today, currency } = await getContext();
+  const { workspaceId, today, currency, tz } = await getContext();
   const defFrom = format(startOfMonth(subMonths(parseISO(today), 11)), "yyyy-MM-dd");
   let from = isDateKey(str(sp.from)) ? str(sp.from) : defFrom;
   let to = isDateKey(str(sp.to)) ? str(sp.to) : today;
   if (from > to) [from, to] = [to, from];
-  const a = await getAnalytics(workspaceId, { from, to }, today);
+  // Charts cover at most 60 months; clamp the range so the cards and charts always describe the same period.
+  const earliest = format(startOfMonth(subMonths(parseISO(to), MAX_ANALYTICS_MONTHS - 1)), "yyyy-MM-dd");
+  const clamped = from < earliest;
+  if (clamped) from = earliest;
+  const a = await getAnalytics(workspaceId, { from, to }, today, tz);
   const m = (v: number) => formatMoney(v, currency);
   const hasFinance = a.totals.count > 0;
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Analytics" description={`Insights from your recorded data · ${formatDate(from)} – ${formatDate(to)}`} />
+      <PageHeader
+        title="Analytics"
+        description={`Insights from your recorded data · ${formatDate(from)} – ${formatDate(to)}${clamped ? " (limited to the most recent 60 months)" : ""}`}
+      />
       <RangePicker from={from} to={to} />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

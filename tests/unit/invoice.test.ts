@@ -69,7 +69,10 @@ describe("invoice status", () => {
   it("updates stored status after payments", () => {
     expect(statusAfterPayment("SENT", 10000, 10000)).toBe("PAID");
     expect(statusAfterPayment("PAID", 10000, 5000)).toBe("SENT");
-    expect(statusAfterPayment("OVERDUE", 10000, 5000)).toBe("OVERDUE");
+    // OVERDUE is never stored; it is derived from the due date.
+    expect(statusAfterPayment("OVERDUE", 10000, 5000)).toBe("SENT");
+    expect(statusAfterPayment("DRAFT", 0, 0)).toBe("DRAFT");
+    expect(statusAfterPayment("SENT", 0, 0)).toBe("PAID");
   });
   it("never reports a negative balance", () => {
     expect(invoiceBalance(10000, 4000)).toBe(6000);
