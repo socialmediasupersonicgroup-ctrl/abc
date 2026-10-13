@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { authEnabled } from "@/lib/auth/session";
 import { getContext } from "@/server/workspace";
 import { listWorkspaces } from "@/lib/services/workspaces";
 import { getAlerts } from "@/lib/services/notifications";
@@ -49,7 +50,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div className="flex min-h-dvh">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
-          <Topbar alerts={alerts} />
+          <Topbar alerts={alerts} authEnabled={authEnabled()} />
           <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
         </div>
       </div>

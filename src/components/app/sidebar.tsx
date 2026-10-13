@@ -118,7 +118,7 @@ export function Sidebar() {
           </button>
         ) : (
           <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
-            Local single-user mode · data stored on this server
+            Single-user workspace · data stored on this server
           </p>
         )}
       </div>

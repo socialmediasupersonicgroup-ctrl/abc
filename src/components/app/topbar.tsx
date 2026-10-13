@@ -3,13 +3,14 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FlaskConical, Menu, Search, Settings } from "lucide-react";
+import { FlaskConical, LogOut, Menu, Search, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, SheetContent } from "@/components/ui/dialog";
 import { Kbd } from "@/components/ui/misc";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { Alert } from "@/lib/services/notifications";
 import { initials } from "@/lib/utils";
+import { logoutAction } from "@/server/actions/auth";
 import { useApp } from "./app-context";
 import { Logo } from "./logo";
 import { SidebarNav } from "./sidebar";
@@ -18,7 +19,7 @@ import { ThemeToggle } from "./theme-toggle";
 import { Notifications } from "./notifications";
 import { QuickCreate } from "./quick-create";
 
-export function Topbar({ alerts }: { alerts: Alert[] }) {
+export function Topbar({ alerts, authEnabled }: { alerts: Alert[]; authEnabled: boolean }) {
   const { setPaletteOpen, workspace } = useApp();
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const pathname = usePathname();
@@ -89,9 +90,15 @@ export function Topbar({ alerts }: { alerts: Alert[] }) {
                 <Search /> Command palette
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <p className="px-2 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                Local single-user mode. No sign-in is required and no data leaves this server.
-              </p>
+              {authEnabled ? (
+                <DropdownMenuItem onSelect={() => void logoutAction()}>
+                  <LogOut /> Sign out
+                </DropdownMenuItem>
+              ) : (
+                <p className="px-2 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                  Local mode: no password is set, so anyone who can reach this server has access.
+                </p>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

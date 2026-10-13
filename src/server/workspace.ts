@@ -3,15 +3,18 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { todayKey } from "@/lib/dates";
+import { requireAuth } from "@/server/auth";
 
 export const WORKSPACE_COOKIE = "nexus_workspace";
 
 /**
- * NEXUS runs in local single-user mode: there is no authentication, and workspaces are a way of
- * separating data (e.g. two businesses, or demo vs. real), not a security boundary.
+ * NEXUS is single-user. When NEXUS_PASSWORD is set, every request requires the owner's session
+ * (see src/middleware.ts and requireAuth). Workspaces separate data (e.g. two businesses, or demo
+ * vs. real); they are not separate user accounts.
  * The active workspace is remembered in a cookie.
  */
 export const getWorkspace = cache(async () => {
+  await requireAuth();
   const store = await cookies();
   const id = store.get(WORKSPACE_COOKIE)?.value;
   let ws = id ? await prisma.workspace.findUnique({ where: { id } }) : null;

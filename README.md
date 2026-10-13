@@ -61,6 +61,30 @@ npm start                       # http://localhost:3000
 
 `npm run setup` creates a workspace called **"Demo Studio (sample data)"**. Every record in it is fictional and is labelled as such throughout the UI. To start fresh, open the workspace switcher in the top-left corner and choose **New workspace**. You can reset or reload the demo at any time from **Settings → Data management**. The seed script and the demo reset only ever modify the workspace flagged as the demo.
 
+## Deploying to Railway
+
+The repository includes a `Dockerfile` and `railway.json`, so Railway builds and runs it with no extra setup. The container applies database migrations on start and serves a public health check at `/api/health`.
+
+1. Sign in at [railway.com](https://railway.com) with GitHub. Choose **New Project → Deploy from GitHub repo**, then select this repository.
+2. In the new service, open **Variables** and add `NEXUS_PASSWORD` with a long, unique password. Optionally add `SESSION_SECRET` with a random string.
+3. Right-click the service (or use **⌘K → Add Volume**), add a **Volume**, and set its mount path to `/data`. The SQLite database lives there, so your data survives redeploys.
+4. Open **Settings → Networking → Generate Domain**. Railway gives you a public `https://….up.railway.app` link.
+5. Open the link and sign in with your password.
+
+The same image runs on any Docker host:
+
+```bash
+docker build -t nexus .
+docker run -p 3000:3000 -e NEXUS_PASSWORD='your-password' -v nexus-data:/data nexus
+```
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `NEXUS_PASSWORD` | Yes, for any public deployment | Owner password. When it is set, every page, server action and search request requires a signed session. |
+| `SESSION_SECRET` | No | Key for signing session cookies. Defaults to `NEXUS_PASSWORD`. Changing either value signs everyone out. |
+| `DATABASE_URL` | No | Defaults to `file:<volume>/nexus.db` (Railway's `RAILWAY_VOLUME_MOUNT_PATH`, otherwise `/data`). |
+| `PORT` | No | Set automatically by Railway. Defaults to 3000. |
+
 ## Scripts
 
 | Command | Purpose |
@@ -70,10 +94,11 @@ npm start                       # http://localhost:3000
 | `npm run lint` | ESLint (Next.js core-web-vitals and TypeScript rules) |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | Unit and integration tests (Vitest, against a fresh SQLite database at `prisma/test.db`) |
-| `npm run test:e2e` | Playwright end-to-end tests. Run `npm run build` first. The tests start their own server on port 3100 with a fresh `prisma/e2e.db`. To use an already-installed Chromium, set `PLAYWRIGHT_CHROMIUM_PATH=/path/to/chrome`; otherwise run `npx playwright install chromium` once. |
+| `npm run test:e2e` | Playwright end-to-end tests. Run `npm run build` first. The tests start two servers with fresh databases: port 3100 runs open, and port 3101 has a password set, to test the sign-in gate. To use an already-installed Chromium, set `PLAYWRIGHT_CHROMIUM_PATH=/path/to/chrome`; otherwise run `npx playwright install chromium` once. |
 | `npm run db:migrate` | Create or apply migrations during development |
 | `npm run db:seed` | Reseed the demo workspace |
 | `npm run setup` | Apply migrations and seed (first run) |
+| `npm run start:prod` | Production entrypoint used by Docker and Railway: migrate, then start on `$PORT` |
 
 ## Project structure
 
@@ -121,8 +146,8 @@ Revenue is therefore the sum of income transactions, and invoice totals are neve
 
 ## Limitations and deployment notes
 
-- **No authentication: local single-user mode.** Anyone who can reach the server can read and change every workspace. Workspaces separate data for convenience; they are **not** a security boundary or multi-tenant isolation. Run NEXUS on your own computer or a trusted private network. Before exposing it publicly, add real authentication (for example Auth.js or a hosted identity provider) and per-user authorization in `src/server/workspace.ts` and the services.
-- **SQLite** keeps setup simple and persists data to `prisma/dev.db`. To back up, copy the file while the app is stopped. Serverless platforms with ephemeral file systems (for example Vercel) will lose SQLite data. On those, switch the Prisma `provider` to PostgreSQL and regenerate the migrations.
+- **Single owner password, not user accounts.** When `NEXUS_PASSWORD` is set, the middleware and a server-side check on every page and action require a signed, httpOnly session cookie. Sessions last 30 days. Failed sign-ins are rate-limited (5 attempts per 15 minutes per client, held in memory). There are no separate user accounts or roles, and anyone who knows the password has full access. Workspaces separate data; they do not isolate users from each other. Without `NEXUS_PASSWORD`, the app runs open, which is only appropriate on your own machine.
+- **SQLite** keeps setup simple. Locally it persists to `prisma/dev.db`; on Railway it persists to the attached volume. Run a single instance only (no horizontal scaling). To back up, copy the database file, or use Railway's volume backups. Serverless platforms with ephemeral file systems (for example Vercel) will lose SQLite data. On those, switch the Prisma `provider` to PostgreSQL and regenerate the migrations.
 - **No external integrations.** NEXUS does not send email, sync with Google or other calendars, or post to social platforms. Email and phone links open your own apps, and invoices are sent by downloading the PDF. No API keys are required.
 - **Invoice PDFs** use jsPDF's built-in fonts, which have no ₹ glyph, so amounts in the PDF show the currency code (for example "INR 54,692.99"). The on-screen preview and the browser's print output (Print → Save as PDF) use the ₹ symbol.
 - **Assignees** are free text, because NEXUS has no user accounts.

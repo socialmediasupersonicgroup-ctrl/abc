@@ -2,6 +2,7 @@ import "server-only";
 import { revalidatePath } from "next/cache";
 import type { ZodType, ZodTypeDef } from "zod";
 import { AppError } from "@/lib/services/errors";
+import { requireAuth } from "@/server/auth";
 
 export type ActionResult<T = undefined> =
   | { ok: true; data?: T; message?: string }
@@ -28,6 +29,8 @@ export function assertId(id: unknown): string {
 
 /** Runs a mutation, converts known errors into user-facing results and refreshes cached pages. */
 export async function runAction<T>(fn: () => Promise<T>, message?: string): Promise<ActionResult<T>> {
+  // Outside the try block: an unauthenticated call redirects to sign-in instead of being reported as an error.
+  await requireAuth();
   try {
     const data = await fn();
     revalidatePath("/", "layout");
