@@ -4,7 +4,9 @@ import { keyToDate } from "@/lib/dates";
 import { summarize } from "@/lib/calc/metrics";
 import type { TransactionInput } from "@/lib/validation";
 import { AppError, NotFoundError } from "./errors";
-import { assertLinks, containsText, type Db } from "./shared";
+import { assertLinks, textWhere, type Db, type TextSpec } from "./shared";
+
+export const TRANSACTION_TEXT: TextSpec = { table: "Transaction", columns: ["description", "reference", "category", "notes"], relations: [{ fk: "customerId", relation: "customer", table: "Customer", columns: ["name"] }] };
 
 export type TransactionFilters = {
   q?: string;
@@ -17,10 +19,10 @@ export type TransactionFilters = {
   sort?: "date" | "amount" | "";
 };
 
-export function transactionWhere(workspaceId: string, f: TransactionFilters): Prisma.TransactionWhereInput {
+export async function transactionWhere(workspaceId: string, f: TransactionFilters, db: Db = prisma): Promise<Prisma.TransactionWhereInput> {
   const where: Prisma.TransactionWhereInput = { workspaceId };
-  const q = containsText(f.q);
-  if (q) where.OR = [{ description: q }, { reference: q }, { category: q }, { notes: q }, { customer: { name: q } }];
+  const text = await textWhere(db, workspaceId, f.q, TRANSACTION_TEXT);
+  if (text) where.AND = [text as Prisma.TransactionWhereInput];
   if (f.type) where.type = f.type;
   if (f.category) where.category = f.category;
   if (f.customerId) where.customerId = f.customerId;
@@ -34,7 +36,7 @@ export function transactionWhere(workspaceId: string, f: TransactionFilters): Pr
 }
 
 export async function listTransactions(workspaceId: string, filters: TransactionFilters = {}, page = 1, pageSize = 50, db: Db = prisma) {
-  const where = transactionWhere(workspaceId, filters);
+  const where = await transactionWhere(workspaceId, filters, db);
   const orderBy: Prisma.TransactionOrderByWithRelationInput[] =
     filters.sort === "amount" ? [{ amount: "desc" }] : [{ date: "desc" }, { createdAt: "desc" }];
   const [rows, total, all] = await Promise.all([

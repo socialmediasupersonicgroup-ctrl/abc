@@ -71,7 +71,9 @@ export function TransactionDialog({
 
   React.useEffect(() => {
     if (open) reset(toValues(transaction, today, defaults));
-  }, [open, transaction, today, defaults, reset]);
+    // Reset when the dialog opens or switches record, not when a refresh hands over a new object for the same one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, transaction?.id, today, defaults, reset]);
 
   const base = type === "INCOME" ? INCOME_CATEGORIES.filter((c) => c !== "Invoice payment") : EXPENSE_CATEGORIES;
   const categoryList = [...new Set([...base, ...categories.filter((c) => c !== "Invoice payment" && !(type === "INCOME" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES).includes(c))])];

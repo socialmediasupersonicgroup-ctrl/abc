@@ -19,12 +19,13 @@ import { cn } from "@/lib/utils";
 import { useApp } from "@/components/app/app-context";
 
 export function WorkspaceForm({ initial, currencyLocked }: { initial: WorkspaceFormValues; currencyLocked: boolean }) {
+  const { workspace } = useApp();
   const form = useForm<WorkspaceFormValues, unknown, WorkspaceInput>({ resolver: zodResolver(workspaceSchema), defaultValues: initial });
   const { register, handleSubmit, formState, setError, getValues, reset } = form;
   const e = formState.errors;
   const onSubmit = handleSubmit(async () => {
     const values = getValues();
-    const res = await runClientAction(updateWorkspaceAction(values), { setError });
+    const res = await runClientAction(updateWorkspaceAction(values, workspace.id), { setError });
     if (res) reset(values);
   });
   const tzs = TIMEZONES.includes(initial.timezone) ? TIMEZONES : [initial.timezone, ...TIMEZONES];

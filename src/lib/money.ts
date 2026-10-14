@@ -27,8 +27,11 @@ export function localeForCurrency(code: string): string {
  * Columns are 64-bit floats holding whole minor units, which are exact up to 2^53.
  */
 export const MAX_MINOR = 1_000_000_000_00;
-/** Ceiling for computed invoice totals (many lines × large quantities). */
-export const MAX_TOTAL_MINOR = 1_000_000_000_000_00;
+/**
+ * Ceiling for invoice totals and single payments (≈ ₹900 crore). Chosen so every intermediate product in the
+ * invoice maths (subtotal × discount bps, taxable × tax bps, quantity × unit price) stays below 2^53 and is exact.
+ */
+export const MAX_TOTAL_MINOR = Math.floor(Number.MAX_SAFE_INTEGER / 10_000);
 
 /**
  * Parses a user supplied decimal string into minor units. Accepts

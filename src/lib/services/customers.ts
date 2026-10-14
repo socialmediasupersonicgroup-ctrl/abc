@@ -4,8 +4,10 @@ import { keyToDate } from "@/lib/dates";
 import { projectProgress } from "@/lib/calc/progress";
 import { CUSTOMER_NOTES_MAX, type CustomerInput } from "@/lib/validation";
 import { AppError, NotFoundError } from "./errors";
-import { containsText, toDate, type Db } from "./shared";
+import { textWhere, toDate, type Db, type TextSpec } from "./shared";
 import { taskInclude } from "./tasks";
+
+export const CUSTOMER_TEXT: TextSpec = { table: "Customer", columns: ["name", "company", "email", "phone"] };
 
 export type CustomerFilters = {
   q?: string;
@@ -17,8 +19,8 @@ export type CustomerFilters = {
 
 export async function listCustomers(workspaceId: string, filters: CustomerFilters = {}, today?: string, db: Db = prisma) {
   const where: Prisma.CustomerWhereInput = { workspaceId };
-  const q = containsText(filters.q);
-  if (q) where.OR = [{ name: q }, { company: q }, { email: q }, { phone: q }];
+  const text = await textWhere(db, workspaceId, filters.q, CUSTOMER_TEXT);
+  if (text) where.AND = [text as Prisma.CustomerWhereInput];
   if (filters.status) where.status = filters.status;
   if (filters.source) where.source = filters.source;
   if (filters.followUp && today) {

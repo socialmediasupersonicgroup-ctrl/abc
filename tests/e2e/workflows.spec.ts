@@ -168,6 +168,30 @@ test("search box keeps text typed after a pause", async ({ page }) => {
   await expect(page.getByTestId("customer-row")).toHaveCount(1);
 });
 
+test("analytics date inputs show the range in use and apply picked dates", async ({ page }) => {
+  await open(page, "/analytics");
+  const from = page.getByLabel("From", { exact: true });
+  const to = page.getByLabel("To", { exact: true });
+  await expect(from).not.toHaveValue("");
+  await expect(to).not.toHaveValue("");
+  // Choosing a complete date applies it without needing to blur the field.
+  await from.fill("2026-01-01");
+  await expect(page).toHaveURL(/from=2026-01-01/);
+  await expect(page.getByText(/1 Jan 2026 –/)).toBeVisible();
+});
+
+test("filter and period changes always navigate (no dropped soft navigations)", async ({ page }) => {
+  // Regression: a route-group loading.tsx made Next drop roughly half of same-page search-param navigations in production.
+  for (let i = 0; i < 4; i++) {
+    await open(page, "/");
+    await page.getByLabel("Reporting period").selectOption(i % 2 ? "quarter" : "year");
+    await expect(page).toHaveURL(new RegExp(`period=${i % 2 ? "quarter" : "year"}`));
+    await open(page, "/customers");
+    await page.getByLabel("Status", { exact: true }).selectOption("LEAD");
+    await expect(page).toHaveURL(/status=LEAD/);
+  }
+});
+
 test("expense transaction updates finance and dashboard", async ({ page }) => {
   await open(page, "/finance");
   await page.getByRole("button", { name: "Expense" }).click();
@@ -197,7 +221,9 @@ test("command palette searches records", async ({ page }) => {
   await input.fill("verma");
   await expect(page.getByRole("option", { name: /^Asha Verma/ })).toBeVisible();
   // Results are grouped by type; the invoice for this customer matches too.
-  await expect(page.getByRole("option", { name: /INV-0001/ })).toBeVisible();
+  await expect(page.getByRole("option", { name: /^INV-0001 ·/ })).toBeVisible();
+  // The invoice payment is found through its customer too.
+  await expect(page.getByRole("option", { name: /Payment for INV-0001/ })).toBeVisible();
   await page.getByRole("option", { name: /^Asha Verma/ }).click();
   await expect(page).toHaveURL(/\/customers\/[a-z0-9]+$/);
 });

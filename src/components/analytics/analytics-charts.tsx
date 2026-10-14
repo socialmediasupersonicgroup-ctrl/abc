@@ -53,9 +53,9 @@ export function RangePicker({ from, to }: { from: string; to: string }) {
           {p.label}
         </button>
       ))}
-      <UrlDateInput param="from" label="From" max={to} required />
+      <UrlDateInput param="from" label="From" value={from} max={to} required />
       <span className="text-xs text-muted-foreground">to</span>
-      <UrlDateInput param="to" label="To" min={from} required />
+      <UrlDateInput param="to" label="To" value={to} min={from} required />
     </div>
   );
 }

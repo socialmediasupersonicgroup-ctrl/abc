@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type { NoteInput } from "@/lib/validation";
 import { NotFoundError } from "./errors";
-import { assertLinks, containsText, pruneOrphanTags, tagsPayload, type Db } from "./shared";
+import { assertLinks, textWhere, pruneOrphanTags, tagsPayload, type Db, type TextSpec } from "./shared";
 
 export const noteInclude = {
   tags: { select: { id: true, name: true }, orderBy: { name: "asc" } },
@@ -13,13 +13,15 @@ export const noteInclude = {
 
 export type NoteWithRelations = Prisma.NoteGetPayload<{ include: typeof noteInclude }>;
 
+export const NOTE_TEXT: TextSpec = { table: "Note", columns: ["title", "content"], tags: true };
+
 export type NoteFilters = { q?: string; tag?: string; view?: "active" | "archived" | "pinned" | "" };
 
 export async function listNotes(workspaceId: string, filters: NoteFilters = {}, db: Db = prisma) {
   const where: Prisma.NoteWhereInput = { workspaceId, archived: filters.view === "archived" };
   if (filters.view === "pinned") where.pinned = true;
-  const q = containsText(filters.q);
-  if (q) where.OR = [{ title: q }, { content: q }, { tags: { some: { name: q } } }];
+  const text = await textWhere(db, workspaceId, filters.q, NOTE_TEXT);
+  if (text) where.AND = [text as Prisma.NoteWhereInput];
   if (filters.tag) where.tags = { some: { name: filters.tag } };
   return db.note.findMany({
     where,

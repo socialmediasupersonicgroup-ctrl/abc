@@ -118,6 +118,50 @@ describe("invoices", () => {
   });
 });
 
+describe("large invoices", () => {
+  it("accepts a full-balance payment above the per-field limit", async () => {
+    const ws = await newWorkspace();
+    const c = await createCustomer(ws.id, customerInput());
+    const inv = await createInvoice(ws.id, "INR", invoice(c.id, { items: [{ description: "Plant", quantity: "2", unitPrice: "750000000" }] }));
+    expect(inv.total).toBe(177_000_000_000);
+    await recordPayment(ws.id, inv.id, paymentSchema.parse({ amount: "1770000000.00", date: TODAY }));
+    expect((await getInvoice(ws.id, inv.id, TODAY)).status).toBe("PAID");
+  });
+
+  it("keeps invoice maths exact up to the total ceiling and rejects anything beyond it", async () => {
+    const { calculateInvoiceTotals } = await import("@/lib/calc/invoice");
+    const { MAX_TOTAL_MINOR } = await import("@/lib/money");
+    // Largest subtotal whose taxed total still fits: every product stays below 2^53.
+    const t = calculateInvoiceTotals({ items: [{ quantity: 1, unitPrice: 762_982_987_000 }], discountType: "PERCENT", discountValue: 3333, taxRateBps: 1800 });
+    const exactTax = (BigInt(t.taxableAmount) * 1800n * 2n + 10000n) / 20000n;
+    expect(BigInt(t.taxAmount)).toBe(exactTax);
+    expect(t.total).toBeLessThanOrEqual(MAX_TOTAL_MINOR);
+    const ws = await newWorkspace();
+    const c = await createCustomer(ws.id, customerInput());
+    await expect(createInvoice(ws.id, "INR", invoice(c.id, { items: [{ description: "Too big", quantity: "100", unitPrice: "1000000000" }] }))).rejects.toThrow(/too large/);
+  });
+
+  it("stays editable after its project moves to another customer", async () => {
+    const ws = await newWorkspace();
+    const a = await createCustomer(ws.id, customerInput({ name: "A" }));
+    const b = await createCustomer(ws.id, customerInput({ name: "B" }));
+    const p = await createProject(ws.id, projectInput({ customerId: a.id }));
+    const inv = await createInvoice(ws.id, "INR", invoice(a.id, { projectId: p.id }));
+    await prisma.project.update({ where: { id: p.id }, data: { customerId: b.id } });
+    await expect(updateInvoice(ws.id, inv.id, invoice(a.id, { projectId: p.id, notes: "Updated" }))).resolves.toBeTruthy();
+  });
+
+  it("never raises an overdue alert for an invoice with nothing left to pay", async () => {
+    const { getAlerts } = await import("@/lib/services/notifications");
+    const ws = await newWorkspace();
+    const c = await createCustomer(ws.id, customerInput());
+    // A legacy row (stored SENT with a zero total), as written by older versions.
+    await prisma.invoice.create({ data: { workspaceId: ws.id, number: "LEG-1", customerId: c.id, status: "SENT", issueDate: new Date("2026-09-01T00:00:00Z"), dueDate: new Date("2026-09-15T00:00:00Z"), total: 0 } });
+    const alerts = await getAlerts(ws.id, TODAY, new Date(`${TODAY}T12:00:00Z`), "INR");
+    expect(alerts.filter((x) => x.kind === "invoice")).toHaveLength(0);
+  });
+});
+
 describe("projects & customers", () => {
   it("counts every linked expense toward the budget", async () => {
     const ws = await newWorkspace();
@@ -187,16 +231,35 @@ describe("time zones in analytics", () => {
 });
 
 describe("search", () => {
-  it("does not treat % and _ as wildcards", async () => {
+  it("does not treat % and _ as wildcards, in lists, totals or the command palette", async () => {
     const ws = await newWorkspace();
+    const { listTasks } = await import("@/lib/services/tasks");
     await createTask(ws.id, taskInput({ title: "Probe task" }));
     await createTask(ws.id, taskInput({ title: "Offer 50% discount" }));
-    // A query made only of wildcard characters matches nothing (instead of everything).
-    expect(await globalSearch(ws.id, "%", "INR")).toHaveLength(0);
+    // Newer decoys that contain the literal segment "50" but not "50%".
+    for (let i = 0; i < 6; i++) await createTask(ws.id, taskInput({ title: `Order 50 units batch ${i}` }));
+
     expect((await globalSearch(ws.id, "50%", "INR")).map((h) => h.title)).toEqual(["Offer 50% discount"]);
     expect(await globalSearch(ws.id, "_", "INR")).toHaveLength(0);
-    // List filters never return everything for a wildcard-only query.
-    const { listTasks } = await import("@/lib/services/tasks");
+    expect((await listTasks(ws.id, { q: "50%" })).map((t) => t.title)).toEqual(["Offer 50% discount"]);
     expect(await listTasks(ws.id, { q: "_" })).toHaveLength(0);
+    // Plain queries are unchanged.
+    expect(await listTasks(ws.id, { q: "units" })).toHaveLength(6);
+
+    await createTransaction(ws.id, txnInput({ description: "Annual 50% off promo", amount: 1000 }));
+    await createTransaction(ws.id, txnInput({ description: "Office rent", amount: 5_000_000 }));
+    const filtered = await listTransactions(ws.id, { q: "50% off" });
+    expect(filtered.rows.map((r) => r.description)).toEqual(["Annual 50% off promo"]);
+    expect(filtered.summary.expense).toBe(1000);
+  });
+
+  it("matches wildcard characters in related fields", async () => {
+    const ws = await newWorkspace();
+    const c = await createCustomer(ws.id, customerInput({ name: "Acme_Industries" }));
+    await createCustomer(ws.id, customerInput({ name: "AcmeXIndustries" }));
+    await createInvoice(ws.id, "INR", invoice(c.id, { number: "INV_2026_0042" }));
+    await createInvoice(ws.id, "INR", invoice(c.id, { number: "INVX2026X0042" }));
+    expect((await listInvoices(ws.id, { q: "INV_2026_0042" }, TODAY)).map((i) => i.number)).toEqual(["INV_2026_0042"]);
+    expect((await listInvoices(ws.id, { q: "acme_ind" }, TODAY)).length).toBe(2);
   });
 });

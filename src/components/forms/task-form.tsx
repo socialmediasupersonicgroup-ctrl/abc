@@ -65,7 +65,9 @@ export function TaskDialog({
 
   React.useEffect(() => {
     if (open) reset(toValues(task, defaults));
-  }, [open, task, defaults, reset]);
+    // Reset when the dialog opens or switches record, not when a refresh hands over a new object for the same one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, task?.id, defaults, reset]);
 
 
   const onSubmit = handleSubmit(async () => {

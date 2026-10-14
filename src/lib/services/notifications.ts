@@ -22,7 +22,7 @@ export async function getAlerts(workspaceId: string, today: string, now: Date, c
     db.event.findMany({ where: { workspaceId, startAt: { gte: now, lte: in24h } }, orderBy: { startAt: "asc" }, take: 5 }),
   ]);
   return [
-    ...overdueInvoices.map((i) => ({
+    ...overdueInvoices.filter((i) => i.total - i.amountPaid > 0).map((i) => ({
       id: `inv-${i.id}`,
       kind: "invoice" as const,
       title: `${i.number} is overdue`,

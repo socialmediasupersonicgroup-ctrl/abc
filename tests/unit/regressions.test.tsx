@@ -5,7 +5,6 @@ import { formatMoneyCompact, parseMoney } from "@/lib/money";
 import { addDaysToKey, isDateKey, isDateTimeLocal, plusOneHour } from "@/lib/dates";
 import { effectiveInvoiceStatus } from "@/lib/calc/invoice";
 import { safeAnchor, visibleRange } from "@/lib/calendar";
-import { containsText, textIncludes } from "@/lib/services/shared";
 import { Markdown } from "@/components/notes/markdown";
 
 describe("money input formats", () => {
@@ -74,16 +73,6 @@ describe("day arithmetic is independent of the server's DST zone", () => {
 describe("invoice status edge cases", () => {
   it("treats an issued zero-total invoice as paid, never overdue", () => {
     expect(effectiveInvoiceStatus({ status: "SENT", total: 0, amountPaid: 0, dueDate: new Date("2026-01-01T00:00:00Z") }, "2026-10-12")).toBe("PAID");
-  });
-});
-
-describe("search wildcards", () => {
-  it("never passes LIKE wildcards through", () => {
-    expect(containsText("acme")).toEqual({ contains: "acme" });
-    expect(containsText("INV_01")).toEqual({ contains: "INV" });
-    expect(containsText("%")?.contains).not.toContain("%");
-    expect(textIncludes("50%", "Discount 50% off")).toBe(true);
-    expect(textIncludes("50%", "50 units")).toBe(false);
   });
 });
 

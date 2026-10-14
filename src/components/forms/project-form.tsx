@@ -70,7 +70,9 @@ export function ProjectDialog({
       reset(toValues(project, defaults));
       setInitialTasks("");
     }
-  }, [open, project, defaults, reset]);
+    // Reset when the dialog opens or switches record, not when a refresh hands over a new object for the same one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, project?.id, defaults, reset]);
 
   const onSubmit = handleSubmit(async () => {
     const values = getValues();

@@ -43,7 +43,8 @@ export function CalendarView({
   const tz = workspace.timezone;
   const { set, params } = useUrlParams();
   const [editing, setEditing] = React.useState<CalEvent | null>(selected);
-  React.useEffect(() => setEditing(selected), [selected]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  React.useEffect(() => setEditing(selected), [selected?.id]);
 
   const days = React.useMemo(() => Array.from({ length: range.days }, (_, i) => addDaysToKey(range.from, i)), [range]);
 

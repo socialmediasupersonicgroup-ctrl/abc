@@ -45,7 +45,9 @@ export function InvoiceEditor({ invoiceId, initial, amountPaid = 0 }: { invoiceI
     return calculateInvoiceTotals({ items: parsed, discountType, discountValue: dv, taxRateBps: parsePercentToBps(String(taxRate ?? "")) ?? 0 });
   }, [items, discountType, discountValue, taxRate]);
 
-  const projects = options.projects.filter((p) => !customerId || !p.customerId || p.customerId === customerId);
+  const projectId = useWatch({ control, name: "projectId" });
+  // Projects for the chosen customer, plus the one already selected (so an existing link is never hidden).
+  const projects = options.projects.filter((p) => !customerId || !p.customerId || p.customerId === customerId || p.id === projectId);
 
   const onSubmit = handleSubmit(async () => {
     const values = getValues();
@@ -87,7 +89,7 @@ export function InvoiceEditor({ invoiceId, initial, amountPaid = 0 }: { invoiceI
                   ))}
                 </Select>
               </Field>
-              <Field label="Project (optional)" htmlFor="inv-project">
+              <Field label="Project (optional)" htmlFor="inv-project" error={errors.projectId?.message}>
                 <Select id="inv-project" {...register("projectId")}>
                   <option value="">No project</option>
                   {projects.map((p) => (

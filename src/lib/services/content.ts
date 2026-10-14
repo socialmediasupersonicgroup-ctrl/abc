@@ -4,14 +4,16 @@ import type { ContentStatus } from "@/lib/constants";
 import { zonedInputToDate } from "@/lib/dates";
 import type { ContentInput } from "@/lib/validation";
 import { NotFoundError } from "./errors";
-import { containsText, type Db } from "./shared";
+import { textWhere, type Db, type TextSpec } from "./shared";
+
+export const CONTENT_TEXT: TextSpec = { table: "ContentItem", columns: ["title", "caption", "hashtags", "campaign"] };
 
 export type ContentFilters = { q?: string; status?: string; platform?: string; campaign?: string };
 
 export async function listContent(workspaceId: string, filters: ContentFilters = {}, db: Db = prisma) {
   const where: Prisma.ContentItemWhereInput = { workspaceId };
-  const q = containsText(filters.q);
-  if (q) where.OR = [{ title: q }, { caption: q }, { hashtags: q }, { campaign: q }];
+  const text = await textWhere(db, workspaceId, filters.q, CONTENT_TEXT);
+  if (text) where.AND = [text as Prisma.ContentItemWhereInput];
   if (filters.status) where.status = filters.status;
   if (filters.platform) where.platform = filters.platform;
   if (filters.campaign) where.campaign = filters.campaign;

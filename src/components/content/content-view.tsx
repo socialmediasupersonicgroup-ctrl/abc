@@ -35,7 +35,8 @@ export function ContentView({ items, campaigns, selected, view: initialView }: {
   }, [urlView]);
   const [editing, setEditing] = React.useState<ContentRecord | null>(selected);
   const [optimistic, setOptimistic] = React.useState<Record<string, string>>({});
-  React.useEffect(() => setEditing(selected), [selected]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  React.useEffect(() => setEditing(selected), [selected?.id]);
   React.useEffect(() => setOptimistic({}), [items]);
   const rows = items.map((i) => (optimistic[i.id] ? { ...i, status: optimistic[i.id] } : i));
   const filtered = KEYS.some((k) => params.get(k));

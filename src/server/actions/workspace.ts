@@ -14,6 +14,11 @@ async function setActive(id: string) {
   store.set(WORKSPACE_COOKIE, id, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365 });
 }
 
+/** Guards against a stale tab acting on whichever workspace another tab switched to. */
+function assertSameWorkspace(expectedId: string, actualId: string) {
+  if (expectedId !== actualId) throw new AppError("You switched workspaces in another tab. Reload this page and try again.");
+}
+
 export async function switchWorkspaceAction(id: string) {
   return runAction(async () => {
     const ws = await prisma.workspace.findUnique({ where: { id: assertId(id) } });
@@ -31,10 +36,11 @@ export async function createWorkspaceAction(name: string) {
   }, "Workspace created");
 }
 
-export async function updateWorkspaceAction(values: WorkspaceFormValues) {
+export async function updateWorkspaceAction(values: WorkspaceFormValues, workspaceId: string) {
   return runAction(async () => {
-    const { workspaceId } = await getContext();
-    await workspaces.updateWorkspace(workspaceId, parseInput(workspaceSchema, values));
+    const { ws } = await getContext();
+    assertSameWorkspace(workspaceId, ws.id);
+    await workspaces.updateWorkspace(ws.id, parseInput(workspaceSchema, values));
   }, "Settings saved");
 }
 
@@ -47,11 +53,6 @@ export async function loadDemoWorkspaceAction() {
     await seedDemoData(prisma, demo.id, demo.timezone);
     await setActive(demo.id);
   }, "Demo workspace ready");
-}
-
-/** Guards against a stale tab acting on whichever workspace another tab switched to. */
-function assertSameWorkspace(expectedId: string, actualId: string) {
-  if (expectedId !== actualId) throw new AppError("You switched workspaces in another tab. Reload this page and try again.");
 }
 
 export async function clearWorkspaceDataAction(confirmName: string, workspaceId: string) {

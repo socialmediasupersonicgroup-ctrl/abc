@@ -53,7 +53,9 @@ export function CustomerDialog({ open, onOpenChange, customer }: { open: boolean
 
   React.useEffect(() => {
     if (open) reset(toValues(customer));
-  }, [open, customer, reset]);
+    // Reset when the dialog opens or switches record, not when a refresh hands over a new object for the same one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, customer?.id, reset]);
 
   const onSubmit = handleSubmit(async () => {
     const values = getValues();

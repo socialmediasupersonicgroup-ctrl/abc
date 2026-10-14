@@ -40,7 +40,9 @@ export function TasksView({ tasks, tags, selected, view: initialView }: { tasks:
   const [optimistic, setOptimistic] = React.useState<Record<string, string>>({});
   const [editing, setEditing] = React.useState<TaskItem | null>(selected);
 
-  React.useEffect(() => setEditing(selected), [selected]);
+  // Keyed on the id: a background refresh delivers a new object for the same task and must not reset an open dialog.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  React.useEffect(() => setEditing(selected), [selected?.id]);
   // Clear optimistic overrides once fresh server data arrives.
   React.useEffect(() => setOptimistic({}), [tasks]);
 

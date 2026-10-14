@@ -4,7 +4,7 @@ import { PRIORITY_RANK, type Priority, type TaskStatus } from "@/lib/constants";
 import { addDaysToKey, keyToDate } from "@/lib/dates";
 import type { TaskInput } from "@/lib/validation";
 import { NotFoundError } from "./errors";
-import { assertLinks, containsText, pruneOrphanTags, tagsPayload, toDate, type Db } from "./shared";
+import { assertLinks, textWhere, pruneOrphanTags, tagsPayload, toDate, type Db, type TextSpec } from "./shared";
 
 export const taskInclude = {
   project: { select: { id: true, name: true } },
@@ -13,6 +13,8 @@ export const taskInclude = {
 } satisfies Prisma.TaskInclude;
 
 export type TaskWithRelations = Prisma.TaskGetPayload<{ include: typeof taskInclude }>;
+
+export const TASK_TEXT: TextSpec = { table: "Task", columns: ["title", "description", "assignee"], tags: true };
 
 export type TaskFilters = {
   q?: string;
@@ -28,8 +30,8 @@ export type TaskFilters = {
 
 export async function listTasks(workspaceId: string, filters: TaskFilters = {}, today?: string, db: Db = prisma) {
   const where: Prisma.TaskWhereInput = { workspaceId };
-  const q = containsText(filters.q);
-  if (q) where.OR = [{ title: q }, { description: q }, { assignee: q }, { tags: { some: { name: q } } }];
+  const text = await textWhere(db, workspaceId, filters.q, TASK_TEXT);
+  if (text) where.AND = [text as Prisma.TaskWhereInput];
   if (filters.status) where.status = filters.status;
   else if (filters.includeDone === false) where.status = { not: "DONE" };
   if (filters.priority) where.priority = filters.priority;

@@ -3,15 +3,17 @@ import { prisma } from "@/lib/db";
 import { projectProgress } from "@/lib/calc/progress";
 import type { ProjectInput } from "@/lib/validation";
 import { NotFoundError } from "./errors";
-import { assertLinks, containsText, toDate, type Db } from "./shared";
+import { assertLinks, textWhere, toDate, type Db, type TextSpec } from "./shared";
 import { taskInclude } from "./tasks";
+
+export const PROJECT_TEXT: TextSpec = { table: "Project", columns: ["name", "description"], relations: [{ fk: "customerId", relation: "customer", table: "Customer", columns: ["name"] }] };
 
 export type ProjectFilters = { q?: string; status?: string; priority?: string; customerId?: string; sort?: string };
 
 export async function listProjects(workspaceId: string, filters: ProjectFilters = {}, db: Db = prisma) {
   const where: Prisma.ProjectWhereInput = { workspaceId };
-  const q = containsText(filters.q);
-  if (q) where.OR = [{ name: q }, { description: q }, { customer: { name: q } }];
+  const text = await textWhere(db, workspaceId, filters.q, PROJECT_TEXT);
+  if (text) where.AND = [text as Prisma.ProjectWhereInput];
   if (filters.status === "OPEN") where.status = { in: ["PLANNING", "ACTIVE", "ON_HOLD"] };
   else if (filters.status) where.status = filters.status;
   if (filters.priority) where.priority = filters.priority;

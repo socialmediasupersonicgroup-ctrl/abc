@@ -6,7 +6,9 @@ import { formatMoney, MAX_TOTAL_MINOR } from "@/lib/money";
 import { calculateInvoiceTotals, effectiveInvoiceStatus, invoiceBalance, statusAfterPayment } from "@/lib/calc/invoice";
 import type { InvoiceInput, PaymentInput } from "@/lib/validation";
 import { AppError, NotFoundError } from "./errors";
-import { assertLinks, containsText, type Db } from "./shared";
+import { assertLinks, textWhere, type Db, type TextSpec } from "./shared";
+
+export const INVOICE_TEXT: TextSpec = { table: "Invoice", columns: ["number", "notes"], relations: [{ fk: "customerId", relation: "customer", table: "Customer", columns: ["name", "company"] }] };
 
 export type InvoiceFilters = { q?: string; status?: string; customerId?: string; sort?: string };
 
@@ -59,11 +61,12 @@ function statusWhere(status: string, today: string): Prisma.InvoiceWhereInput {
   }
 }
 
-export async function listInvoices(workspaceId: string, filters: InvoiceFilters, today: string, db: Db = prisma) {
+/** Matching invoices (up to INVOICE_LIST_LIMIT) and whether more matched than are shown. */
+export async function listInvoicesPage(workspaceId: string, filters: InvoiceFilters, today: string, db: Db = prisma) {
   const and: Prisma.InvoiceWhereInput[] = [];
   if (filters.status) and.push(statusWhere(filters.status, today));
-  const q = containsText(filters.q);
-  if (q) and.push({ OR: [{ number: q }, { customer: { name: q } }, { customer: { company: q } }, { notes: q }] });
+  const text = await textWhere(db, workspaceId, filters.q, INVOICE_TEXT);
+  if (text) and.push(text as Prisma.InvoiceWhereInput);
   const where: Prisma.InvoiceWhereInput = { workspaceId, AND: and };
   if (filters.customerId) where.customerId = filters.customerId;
   const orderBy: Prisma.InvoiceOrderByWithRelationInput[] =
@@ -75,14 +78,22 @@ export async function listInvoices(workspaceId: string, filters: InvoiceFilters,
   const invoices = await db.invoice.findMany({
     where,
     orderBy,
-    take: INVOICE_LIST_LIMIT,
+    // One extra row tells the page whether the list was cut off (see invoiceListTruncated).
+    take: INVOICE_LIST_LIMIT + 1,
     include: { customer: { select: { id: true, name: true, company: true } }, project: { select: { id: true, name: true } } },
   });
-  return invoices.map((inv) => ({
-    ...inv,
-    effectiveStatus: effectiveInvoiceStatus(inv, today),
-    balance: invoiceBalance(inv.total, inv.amountPaid),
-  }));
+  return {
+    truncated: invoices.length > INVOICE_LIST_LIMIT,
+    items: invoices.slice(0, INVOICE_LIST_LIMIT).map((inv) => ({
+      ...inv,
+      effectiveStatus: effectiveInvoiceStatus(inv, today),
+      balance: invoiceBalance(inv.total, inv.amountPaid),
+    })),
+  };
+}
+
+export async function listInvoices(workspaceId: string, filters: InvoiceFilters, today: string, db: Db = prisma) {
+  return (await listInvoicesPage(workspaceId, filters, today, db)).items;
 }
 export type InvoiceListItem = Awaited<ReturnType<typeof listInvoices>>[number];
 
@@ -189,10 +200,13 @@ export async function createInvoice(workspaceId: string, currency: string, input
 }
 
 export async function updateInvoice(workspaceId: string, id: string, input: InvoiceInput, db: PrismaClient = prisma) {
-  const existing = await db.invoice.findFirst({ where: { id, workspaceId }, select: { amountPaid: true, currency: true } });
+  const existing = await db.invoice.findFirst({ where: { id, workspaceId }, select: { amountPaid: true, currency: true, customerId: true, projectId: true } });
   if (!existing) throw new NotFoundError("Invoice");
   await assertLinks(workspaceId, { customerId: input.customerId, projectId: input.projectId }, db);
-  await assertProjectMatchesCustomer(workspaceId, input.projectId, input.customerId, db);
+  // Only validate a link the user is changing, so invoices stay editable if a project later moves to another customer.
+  if (input.projectId !== existing.projectId || input.customerId !== existing.customerId) {
+    await assertProjectMatchesCustomer(workspaceId, input.projectId, input.customerId, db);
+  }
   await assertNumberFree(workspaceId, input.number, id, db);
   const { totals, items } = computed(input);
   if (existing.amountPaid > totals.total) {

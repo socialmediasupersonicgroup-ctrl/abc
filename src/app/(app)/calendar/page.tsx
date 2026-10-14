@@ -64,7 +64,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Sea
       <PageHeader
         title="Calendar"
         description={`Events, deadlines and scheduled content · times shown in ${tz}. Not synced with external calendars.`}
-        actions={<NewButton kind="event" label="New event" defaults={{ date: anchor }} />}
+        // Only pin the date when viewing an explicit one; otherwise the dialog computes a fresh "today" when it opens.
+        actions={<NewButton kind="event" label="New event" defaults={str(sp.date) ? { date: anchor } : undefined} />}
       />
       <CalendarView view={view} anchor={anchor} range={range} events={events} markers={markers} selected={selected} />
     </>

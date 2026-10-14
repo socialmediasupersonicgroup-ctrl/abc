@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { getContext } from "@/server/workspace";
-import { INVOICE_LIST_LIMIT, invoiceSummary, listInvoices } from "@/lib/services/invoices";
+import { INVOICE_LIST_LIMIT, invoiceSummary, listInvoicesPage } from "@/lib/services/invoices";
 import { str, type SearchParams } from "@/server/load";
 import { formatMoney } from "@/lib/money";
 import { PageHeader } from "@/components/ui/misc";
@@ -15,8 +15,8 @@ export const metadata = { title: "Invoices" };
 export default async function InvoicesPage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
   const { workspaceId, today, currency } = await getContext();
-  const [invoices, summary] = await Promise.all([
-    listInvoices(workspaceId, { q: str(sp.q), status: str(sp.status), customerId: str(sp.customerId), sort: str(sp.sort) }, today),
+  const [{ items: invoices, truncated }, summary] = await Promise.all([
+    listInvoicesPage(workspaceId, { q: str(sp.q), status: str(sp.status), customerId: str(sp.customerId), sort: str(sp.sort) }, today),
     // Computed over every invoice in the workspace, independent of list filters and the list's row limit.
     invoiceSummary(workspaceId, today),
   ]);
@@ -54,9 +54,9 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Sea
         ))}
       </div>
       <InvoicesView invoices={invoices} />
-      {invoices.length >= INVOICE_LIST_LIMIT && (
+      {truncated && (
         <p className="mt-3 text-center text-xs text-muted-foreground">
-          Showing the first {INVOICE_LIST_LIMIT} invoices. Use search or filters to find older ones; the totals above include every invoice.
+          Showing the first {INVOICE_LIST_LIMIT} matching invoices. Use search or filters to narrow the list; the totals above include every invoice.
         </p>
       )}
     </>

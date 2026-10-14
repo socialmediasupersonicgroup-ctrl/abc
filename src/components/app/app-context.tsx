@@ -59,9 +59,17 @@ export function AppProvider({
 
   // The layout (and its "today", alerts and options) isn't re-rendered on client navigation.
   // When the tab regains focus on a new calendar day, refresh so dates and overdue states are current.
+  // Compares the browser's own clock with the day it last saw (not with the server's "today"), so a skewed
+  // device clock can't trigger a refresh on every focus; each new day refreshes once.
+  const seenDay = React.useRef<string | null>(null);
   React.useEffect(() => {
+    seenDay.current = todayKey(workspace.timezone);
     const check = () => {
-      if (document.visibilityState === "visible" && todayKey(workspace.timezone) !== today) router.refresh();
+      if (document.visibilityState !== "visible") return;
+      const day = todayKey(workspace.timezone);
+      if (day === seenDay.current) return;
+      seenDay.current = day;
+      router.refresh();
     };
     document.addEventListener("visibilitychange", check);
     window.addEventListener("focus", check);
@@ -69,7 +77,7 @@ export function AppProvider({
       document.removeEventListener("visibilitychange", check);
       window.removeEventListener("focus", check);
     };
-  }, [today, workspace.timezone, router]);
+  }, [workspace.timezone, router]);
   const value = React.useMemo<Ctx>(
     () => ({
       workspace,

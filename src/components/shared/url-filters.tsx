@@ -53,8 +53,9 @@ export function SearchFilter({ placeholder = "Search…", className, param = "q"
       set({ [param]: next || null }, { replace: true });
     }, 300);
     return () => clearTimeout(t);
+    // Re-evaluated when a navigation lands too, so an edit made while a push was in flight is pushed afterwards.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
+  }, [value, urlValue]);
 
   return (
     <div className={cn("relative w-full sm:w-64", className)}>
@@ -72,8 +73,9 @@ export function SearchFilter({ placeholder = "Search…", className, param = "q"
 }
 
 /**
- * Date input bound to a URL param. Edits stay local while typing (so partial keyboard entry isn't
- * reverted or pushed to history) and are committed on change of a complete, valid date, on blur or Enter.
+ * Date input bound to a URL param. Complete, valid dates (typed or picked) apply immediately; partial keyboard
+ * entry stays local so it isn't reverted mid-typing. Invalid or rejected input reverts to the value in effect.
+ * Pass `value` when the page resolves a different effective value than the raw URL (defaults, clamping).
  */
 export function UrlDateInput({
   param,
@@ -82,6 +84,7 @@ export function UrlDateInput({
   min,
   max,
   required,
+  value: effective,
 }: {
   param: string;
   label: string;
@@ -89,19 +92,23 @@ export function UrlDateInput({
   min?: string;
   max?: string;
   required?: boolean;
+  value?: string;
 }) {
   const { params, set } = useUrlParams();
-  const urlValue = params.get(param) ?? "";
-  const [value, setValue] = React.useState(urlValue);
-  React.useEffect(() => setValue(urlValue), [urlValue]);
+  const current = effective ?? params.get(param) ?? "";
+  const [value, setValue] = React.useState(current);
+  // Resync whenever the effective value or the URL changes (including navigations that land on the same value).
+  React.useEffect(() => setValue(current), [current, params]);
 
   const commit = (v: string) => {
-    if (v === urlValue) return;
+    if (v === current) return;
     if (v === "") {
-      if (!required) set({ [param]: null }, { replace: true });
+      if (required) setValue(current);
+      else set({ [param]: null }, { replace: true });
       return;
     }
     if (isDateKey(v)) set({ [param]: v }, { replace: true });
+    else setValue(current);
   };
 
   return (
@@ -111,7 +118,13 @@ export function UrlDateInput({
       value={value}
       min={min}
       max={max}
-      onChange={(e) => setValue(e.target.value)}
+      required={required}
+      onChange={(e) => {
+        const v = e.target.value;
+        setValue(v);
+        // isDateKey rejects years below 1000, so partial keyboard years (0002, 0020…) are never pushed.
+        if (isDateKey(v)) commit(v);
+      }}
       onBlur={() => commit(value)}
       onKeyDown={(e) => e.key === "Enter" && commit(value)}
       className={cn("h-8 w-[150px] text-[13px]", className)}

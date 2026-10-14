@@ -8,7 +8,7 @@ import {
   TASK_STATUS,
   TRANSACTION_TYPE,
 } from "@/lib/constants";
-import { CURRENCY_CODES, MAX_MINOR, parseMoney, parsePercentToBps } from "@/lib/money";
+import { CURRENCY_CODES, formatMoney, MAX_MINOR, MAX_TOTAL_MINOR, parseMoney, parsePercentToBps } from "@/lib/money";
 import { isDateKey, isDateTimeLocal } from "@/lib/dates";
 
 /**
@@ -44,7 +44,7 @@ const optionalDateKey = z
   .refine((v) => !v || isDateKey(v), { message: "Enter a valid date" })
   .transform((v) => (v ? v : null));
 
-const money = (label: string, { allowZero = true } = {}) =>
+const money = (label: string, { allowZero = true, max = MAX_MINOR } = {}) =>
   z
     .union([z.string(), z.number()])
     .transform((v, ctx) => {
@@ -62,8 +62,8 @@ const money = (label: string, { allowZero = true } = {}) =>
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: `${label} must be greater than zero` });
         return z.NEVER;
       }
-      if (parsed > MAX_MINOR) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `${label} is too large` });
+      if (parsed > max) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `${label} is too large (maximum ${formatMoney(max, "INR").replace("₹", "")})` });
         return z.NEVER;
       }
       return parsed;
@@ -225,7 +225,8 @@ export type InvoiceFormValues = z.input<typeof invoiceSchema>;
 export type InvoiceInput = z.output<typeof invoiceSchema>;
 
 export const paymentSchema = z.object({
-  amount: money("Payment amount", { allowZero: false }),
+  // A payment may settle a whole invoice, so it shares the invoice-total ceiling rather than the per-field one.
+  amount: money("Payment amount", { allowZero: false, max: MAX_TOTAL_MINOR }),
   date: dateKey("Payment date"),
   method: optionalText(40),
   reference: optionalText(80),

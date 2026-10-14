@@ -34,34 +34,41 @@ export async function updateWorkspace(id: string, input: WorkspaceInput, db: Pri
       { currency: "Locked once amounts exist" },
     );
   }
-  return db.$transaction(async (tx) => {
-    if (input.timezone !== current.timezone) {
-      // All-day events are stored as midnight in the workspace zone; re-anchor them so they keep their calendar dates.
-      const allDay = await tx.event.findMany({ where: { workspaceId: id, allDay: true }, select: { id: true, startAt: true, endAt: true } });
-      for (const e of allDay) {
-        await tx.event.update({
-          where: { id: e.id },
-          data: {
-            startAt: zonedDayStart(instantToKey(e.startAt, current.timezone), input.timezone),
-            endAt: zonedDayStart(instantToKey(e.endAt, current.timezone), input.timezone),
-          },
-        });
+  return db.$transaction(
+    async (tx) => {
+      // Compare-and-set on the time zone read inside the transaction: if another save changed it meanwhile,
+      // stop instead of re-anchoring all-day events from a stale zone (which would shift them by a day).
+      const fresh = await tx.workspace.findUniqueOrThrow({ where: { id }, select: { timezone: true } });
+      if (input.timezone !== fresh.timezone) {
+        const { count } = await tx.workspace.updateMany({ where: { id, timezone: fresh.timezone }, data: { timezone: input.timezone } });
+        if (count === 0) throw new AppError("Settings were changed in another tab. Reload and try again.");
+        const allDay = await tx.event.findMany({ where: { workspaceId: id, allDay: true }, select: { id: true, startAt: true, endAt: true } });
+        for (const e of allDay) {
+          await tx.event.update({
+            where: { id: e.id },
+            data: {
+              startAt: zonedDayStart(instantToKey(e.startAt, fresh.timezone), input.timezone),
+              endAt: zonedDayStart(instantToKey(e.endAt, fresh.timezone), input.timezone),
+            },
+          });
+        }
       }
-    }
-    return tx.workspace.update({
-      where: { id },
-      data: {
-        name: input.name,
-        currency: input.currency,
-        timezone: input.timezone,
-        weekStartsOn: input.weekStartsOn,
-        invoicePrefix: input.invoicePrefix,
-        defaultTaxBps: input.defaultTaxRate,
-        ownerName: input.ownerName,
-        ownerEmail: input.ownerEmail,
-      },
-    });
-  });
+      return tx.workspace.update({
+        where: { id },
+        data: {
+          name: input.name,
+          currency: input.currency,
+          timezone: input.timezone,
+          weekStartsOn: input.weekStartsOn,
+          invoicePrefix: input.invoicePrefix,
+          defaultTaxBps: input.defaultTaxRate,
+          ownerName: input.ownerName,
+          ownerEmail: input.ownerEmail,
+        },
+      });
+    },
+    { timeout: 30_000 },
+  );
 }
 
 /** Deletes every record in the workspace, in an order that respects the restrictive relations. */
